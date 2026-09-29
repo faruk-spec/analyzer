@@ -87,7 +87,19 @@ jobs:
           fi
 
       - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: |
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee build_debug.log || {
+            echo "::error::Gradle assembleDebug failed! Diagnostic output:"
+            grep -E "(e: |error:|FAILURE:|\* What went wrong:)" build_debug.log | head -n 40
+            exit 1
+          }
+
+      - name: Upload Build Debug Log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-debug-log
+          path: build_debug.log
 
       - name: Build Release APK
         env:
