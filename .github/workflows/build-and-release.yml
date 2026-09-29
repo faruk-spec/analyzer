@@ -66,16 +66,19 @@ jobs:
       - name: Ensure Persistent Signing Keystore
         run: |
           mkdir -p app/keystore
-          rm -f app/keystore/release.jks
-          keytool -genkeypair -v \
-            -keystore app/keystore/release.jks \
-            -alias aviatorlab \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass "aviatorsignallab2026" \
-            -keypass "aviatorsignallab2026" \
-            -dname "CN=AviatorSignalLab, OU=Research, O=Lab, L=Lab, ST=Lab, C=US"
+          if [ ! -f app/keystore/release.jks ]; then
+            keytool -genkeypair -v \
+              -keystore app/keystore/release.jks \
+              -alias aviatorlab \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "aviatorsignallab2026" \
+              -keypass "aviatorsignallab2026" \
+              -dname "CN=AviatorSignalLab, OU=Research, O=Lab, L=Lab, ST=Lab, C=US"
+          else
+            echo "Using committed permanent release.jks (SHA256: $(sha256sum app/keystore/release.jks))"
+          fi
 
       - name: Build Debug APK
         run: |
