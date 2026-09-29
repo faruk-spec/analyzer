@@ -159,17 +159,6 @@ object ScriptInjector {
                                     }
                                 } catch(fastErr) {}
                             }
-                            // Also check Canvas "Flew Away" text crash signals arriving as forwarded messages
-                            if (direction === 'INCOMING' || direction === 'INTERNAL') {
-                                var lc = data.toLowerCase();
-                                if (lc.indexOf('flew away') !== -1 || lc.indexOf('flew-away') !== -1 || lc.indexOf('dom_crash_signal') !== -1) {
-                                    try {
-                                        if (window.AndroidBridge && window.AndroidBridge.onCrashFastPath) {
-                                            window.AndroidBridge.onCrashFastPath('0');
-                                        }
-                                    } catch(fastErr2) {}
-                                }
-                            }
                             safeDispatch("WEBSOCKET", direction, data, data.length);
                         } else if (data instanceof Blob) {
                             data.text().then(function(txt) {

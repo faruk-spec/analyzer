@@ -287,35 +287,15 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                     // STAGE 2: FINAL CASH OUT (Crimson / Rose — Priority 1)
                     binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
                     binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
-                    val isFreeze = alert.reason.contains("FREEZE")
-                    val isExactCrash = alert.reason.contains("FLEW_AWAY")
-                    val isFastPath = alert.reason.contains("FAST_CRASH_SIGNAL")
-                    if (isFreeze) {
-                        val gap = alert.reason.substringAfter("FREEZE_").substringBefore("ms")
-                        binding.tvAlertTitle.text = "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
-                        binding.tvAlertSubtitle.text = "Cadence Silent (${gap}ms) • Tap Cash Out Now!"
-                        binding.tvBubbleStatus.text = "⚡EXIT!"
-                    } else if (isFastPath) {
-                        binding.tvAlertTitle.text = "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
-                        binding.tvAlertSubtitle.text = "WebSocket Fast-Path Crash Intercepted"
-                        binding.tvBubbleStatus.text = "⚡EXIT!"
-                    } else if (isExactCrash) {
-                        binding.tvAlertTitle.text = "FLEW AWAY @ %.2fx".format(alert.multiplier)
-                        binding.tvAlertSubtitle.text = "Exact Crash Instant • Round Concluded"
-                        binding.tvBubbleStatus.text = "CRASH!"
-                    } else {
-                        binding.tvAlertTitle.text = "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
-                        binding.tvAlertSubtitle.text = "Signal: ${alert.reason}"
-                        binding.tvBubbleStatus.text = "⚡EXIT!"
-                    }
+                    binding.tvAlertTitle.text = "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "WebSocket Crash Intercepted • Tap Cash Out!"
+                    binding.tvBubbleStatus.text = "⚡EXIT!"
+                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                    binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                    binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
 
                     // Urgent double haptic vibration
                     triggerImmediateVibration()
-
-                    // Highlight multiplier in intense crash rose
-                    binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-                    binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 }
             } else {
                 binding.bannerPreCrashAlert.visibility = View.GONE

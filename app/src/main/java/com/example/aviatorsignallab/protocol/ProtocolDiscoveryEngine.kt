@@ -64,17 +64,7 @@ class ProtocolDiscoveryEngine(
 
     @Synchronized
     fun checkInFlightGap(currentTime: Long) {
-        // Only trigger on severe, sustained stream freeze (>1200ms) to avoid false alarms from mobile network jitter
-        if (currentState == GameState.LIVE && lastLiveTickTimestamp > 0) {
-            val gap = currentTime - lastLiveTickTimestamp
-            if (gap in 1200..5000) {
-                if (!isPreCrashAlertFiredForRound && currentMultiplier >= 1.30) {
-                    isPreCrashAlertFiredForRound = true
-                    alertFiredMultiplier = currentMultiplier
-                    listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "STREAM_FREEZE_${gap}ms")
-                }
-            }
-        }
+        // Obsolete: Replaced by 100% deterministic Fast-Path crash packet interception
     }
 
     private val multRegex1 = Regex("""([0-9]{1,4}\.[0-9]{1,2})\s*[xX]""")
@@ -423,7 +413,7 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun detectCrashSignal(sanitized: String, fields: Map<String, String>): Boolean {
-        // 1. Spribe Aviator exact crash command: cmd 84, sta 3
+        // 1. Spribe Aviator exact crash command: cmd 84, sta 3 (100% deterministic)
         if (fields["cmd"] == "84" && fields["sta"] == "3") {
             return true
         }
@@ -431,21 +421,17 @@ class ProtocolDiscoveryEngine(
             return true
         }
 
-        // 2. Textual and explicit crash signals
+        // 2. Strict status/state field matches only (reject fuzzy substring matches that hit history logs)
         for ((k, v) in fields) {
-            if (k.contains("status", ignoreCase = true) || k.contains("state", ignoreCase = true) || k.contains("event", ignoreCase = true) || k.contains("type", ignoreCase = true)) {
+            val lowerK = k.lowercase()
+            if (lowerK == "status" || lowerK == "state" || lowerK == "sta") {
                 if (v.equals("crash", ignoreCase = true) ||
                     v.equals("crashed", ignoreCase = true) ||
-                    v.equals("flew_away", ignoreCase = true) ||
-                    v.equals("flew away", ignoreCase = true) ||
-                    v.equals("DOM_CRASH_SIGNAL", ignoreCase = true) ||
-                    v.equals("finish", ignoreCase = true) ||
-                    v.equals("ended", ignoreCase = true)) {
+                    v.equals("flew_away", ignoreCase = true)) {
                     return true
                 }
             }
         }
-        val lower = sanitized.lowercase()
-        return lower.contains("flew away") || lower.contains("flew-away") || lower.contains("\"crash\"") || lower.contains("dom_crash_signal")
+        return false
     }
 }

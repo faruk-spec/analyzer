@@ -113,7 +113,6 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     init {
         loadInitialStats()
         startTicker()
-        startGapWatcher()
         startRiskMonitor()
     }
 
@@ -129,17 +128,6 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             _researchSummary.postValue(summary)
             if (patterns.isNotEmpty()) {
                 protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.descriptor })
-            }
-        }
-    }
-
-    private fun startGapWatcher() {
-        gapWatcherJob = viewModelScope.launch(Dispatchers.Default) {
-            while (isActive) {
-                delay(35L)
-                if (protocolEngine.currentState == GameState.LIVE) {
-                    protocolEngine.checkInFlightGap(System.currentTimeMillis())
-                }
             }
         }
     }
@@ -160,21 +148,20 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * LIVE TICK FREEZE MONITOR: Fast 15ms polling loop that checks if the multiplier
-     * tick cadence has frozen during live flight. When the server prepares the crash packet,
-     * it stops sending cmd:85 ticks. This loop catches that silence 50-150ms BEFORE the
-     * crash packet arrives.
+     * STAGE 1 RISK ADVISORY MONITOR: Checks if current flight has entered the high-multiplier
+     * profit/risk territory (>= 2.00x). Alerts user with Amber 'PREPARE' banner to hover their
+     * finger over Cash Out. Updates live multiplier continuously without premature exit calls.
      */
     private fun startRiskMonitor() {
         riskMonitorJob = viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
-                delay(15L)
+                delay(25L)
                 if (protocolEngine.currentState == GameState.LIVE) {
                     val currentMult = protocolEngine.currentMultiplier
 
                     // STAGE 1: PREPARE ADVISORY (Amber) — Multiplier >= 2.00x
                     // Tells player: High profit/danger zone reached. Get finger hovering over Cash Out!
-                    if (currentMult >= 2.00 && !prepareAlertFiredForRound.get() && !fastPathCrashFiredForRound.get() && !liveTickAnalyzer.hasAlertFired) {
+                    if (currentMult >= 2.00 && !prepareAlertFiredForRound.get() && !fastPathCrashFiredForRound.get()) {
                         prepareAlertFiredForRound.set(true)
                         _preCrashAlert.postValue(PreCrashAlertState(
                             active = true,
@@ -184,36 +171,13 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
                             reason = "HIGH_MULTIPLIER_ZONE"
                         ))
                         onDiagnosticsReceived("[STAGE_1_PREPARE] ⚡ Hover finger over Cash Out — Danger zone at ${"%.2f".format(currentMult)}x")
-                    } else if (prepareAlertFiredForRound.get() && !fastPathCrashFiredForRound.get() && !liveTickAnalyzer.hasAlertFired) {
+                    } else if (prepareAlertFiredForRound.get() && !fastPathCrashFiredForRound.get()) {
                         // While in Stage 1 prepare mode, keep banner multiplier tracking the live climb
                         val currentAlert = _preCrashAlert.value
                         if (currentAlert != null && currentAlert.active && currentAlert.confidence == "PREPARE") {
                             _preCrashAlert.postValue(currentAlert.copy(multiplier = currentMult))
                         }
                     }
-
-                    // STAGE 2: FINAL CASH OUT SIGNAL (Red — Priority 1)
-                    // Triggers when server tick cadence freezes right before crash packet
-                    val result = liveTickAnalyzer.checkForFreeze(System.currentTimeMillis(), currentMult)
-                    _tickFreezeStatus.postValue(result.status)
-
-                    // STRICT: Only fire ONE final alert per round across both freeze and fast-path
-                    if (result.freezeDetected && !liveTickAnalyzer.hasAlertFired && !fastPathCrashFiredForRound.get()) {
-                        liveTickAnalyzer.markAlertFired()
-                        fastPathCrashFiredForRound.set(true)
-                        fastPathLastRoundId = protocolEngine.currentRoundId
-
-                        _preCrashAlert.postValue(PreCrashAlertState(
-                            active = true,
-                            roundId = protocolEngine.currentRoundId,
-                            multiplier = currentMult,
-                            confidence = "FINAL",
-                            reason = "TICK_FREEZE_${result.currentGapMs}ms"
-                        ))
-                        onDiagnosticsReceived("[STAGE_2_FINAL] ⚡ FINAL CASH OUT NOW at ${"%.2f".format(currentMult)}x — cadence silence ${result.currentGapMs}ms (avg ${result.avgIntervalMs}ms)")
-                    }
-                } else {
-                    _tickFreezeStatus.postValue("")
                 }
             }
         }
@@ -290,13 +254,11 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         // Only fire if we're actually in a live round and haven't already fired for this round
         if (protocolEngine.currentState != GameState.LIVE && protocolEngine.currentState != GameState.ROUND_START) return
 
-        // Dedup: exactly one alert per round across both fast-path and cadence freeze
+        // Dedup: exactly one fast-path alert per round
         synchronized(this) {
             if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) return
-            if (liveTickAnalyzer.hasAlertFired) return
             fastPathLastRoundId = currentRound
             fastPathCrashFiredForRound.set(true)
-            liveTickAnalyzer.markAlertFired()
         }
 
         val mult = multiplierStr.toDoubleOrNull() ?: currentMult
@@ -428,10 +390,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
         // STRICT: Only one alert per round across all subsystems
-        if (fastPathCrashFiredForRound.get() || liveTickAnalyzer.hasAlertFired) return
+        if (fastPathCrashFiredForRound.get()) return
         fastPathCrashFiredForRound.set(true)
         fastPathLastRoundId = roundId
-        liveTickAnalyzer.markAlertFired()
 
         _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, "FINAL", reason))
         onDiagnosticsReceived("[FINAL_SIGNAL] Immediate alert at ${currentMultiplier}x ($reason)")
@@ -444,11 +405,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {
         _currentMultiplier.postValue(finalMultiplier)
 
-        // Only post crash alert if neither fast-path nor freeze alert fired yet
+        // Only post crash alert if fast-path didn't already fire one for this round
         if (!fastPathCrashFiredForRound.get()) {
             fastPathCrashFiredForRound.set(true)
             fastPathLastRoundId = roundId
-            liveTickAnalyzer.markAlertFired()
             _preCrashAlert.postValue(PreCrashAlertState(true, roundId, finalMultiplier, "FINAL", "FLEW_AWAY_EXACT"))
         } else {
             // Keep the final alert active and ensure final multiplier is reflected
