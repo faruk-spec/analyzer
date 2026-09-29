@@ -106,4 +106,38 @@ class ProtocolDiscoveryEngineTest {
         assertEquals(GameState.UNKNOWN, engine.currentState)
         assertEquals("--", engine.currentRoundId)
     }
+
+    @Test
+    fun testInstantPreCrashAlertTriggering() {
+        var alertTriggered = false
+        var alertMult = 0.0
+
+        val listener = object : com.example.aviatorsignallab.protocol.StateChangeListener {
+            override fun onStateChanged(previousState: GameState, newState: GameState, currentRoundId: String, multiplier: Double) {}
+            override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {}
+            override fun onRoundStarted(roundId: String, startTimestamp: Long) {}
+            override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
+                alertTriggered = true
+                alertMult = currentMultiplier
+            }
+        }
+
+        val engine = ProtocolDiscoveryEngine(listener)
+
+        // 1. Takeoff
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":1,"rbd":"25068823","ttl":5}""")
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":2,"mul":"1.00"}""")
+
+        // 2. Flight tick at 1.45x
+        val now = 1700000000000L
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":85,"mul":"1.45"}""", timestamp = now)
+
+        assertEquals(false, alertTriggered)
+
+        // 3. Gap check 150ms later without receiving ticks -> pre-crash alert!
+        engine.checkInFlightGap(now + 150L)
+
+        assertEquals(true, alertTriggered)
+        assertEquals(1.45, alertMult, 0.001)
+    }
 }

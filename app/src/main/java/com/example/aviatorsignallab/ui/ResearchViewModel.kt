@@ -25,6 +25,15 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
+data class PreCrashAlertState(
+    val active: Boolean,
+    val roundId: String,
+    val multiplier: Double,
+    val confidence: String,
+    val reason: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 class ResearchViewModel(application: Application) : AndroidViewModel(application), StateChangeListener, NetworkEventListener {
 
     private val db = (application as AviatorLabApplication).database
@@ -59,6 +68,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private val _researchSummary = MutableLiveData(ResearchSummary())
     val researchSummary: LiveData<ResearchSummary> = _researchSummary
 
+    private val _preCrashAlert = MutableLiveData<PreCrashAlertState?>()
+    val preCrashAlert: LiveData<PreCrashAlertState?> = _preCrashAlert
+
     private val _diagnosticsLog = MutableLiveData<List<String>>(emptyList())
     val diagnosticsLog: LiveData<List<String>> = _diagnosticsLog
 
@@ -72,6 +84,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     private val recentEventCounter = AtomicInteger(0)
     private var tickerJob: Job? = null
+    private var gapWatcherJob: Job? = null
 
     // Diagnostics counters
     var wsCount = 0
@@ -83,6 +96,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     init {
         loadInitialStats()
         startTicker()
+        startGapWatcher()
     }
 
     private fun loadInitialStats() {
@@ -93,8 +107,22 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             _totalEvents.postValue(eCount)
 
             val features = db.featureDao().getAllFeatures()
-            val (summary, _) = analysisEngine.analyzeDataset(rCount, eCount, features)
+            val (summary, patterns) = analysisEngine.analyzeDataset(rCount, eCount, features)
             _researchSummary.postValue(summary)
+            if (patterns.isNotEmpty()) {
+                protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.patternDescriptor })
+            }
+        }
+    }
+
+    private fun startGapWatcher() {
+        gapWatcherJob = viewModelScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                delay(35)
+                if (protocolEngine.currentState == GameState.LIVE) {
+                    protocolEngine.checkInFlightGap(System.currentTimeMillis())
+                }
+            }
         }
     }
 
@@ -247,6 +275,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _currentRoundId.postValue(roundId)
         _currentMultiplier.postValue(1.00)
         _elapsedSeconds.postValue(0.0)
+        _preCrashAlert.postValue(null)
 
         viewModelScope.launch(Dispatchers.IO) {
             protocolEngine.activeRound?.let {
@@ -256,8 +285,14 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
+        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, confidence, reason))
+        onDiagnosticsReceived("[PRE_CRASH_SIGNAL] Immediate alert at ${currentMultiplier}x ($reason)")
+    }
+
     override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {
         _currentMultiplier.postValue(finalMultiplier)
+        _preCrashAlert.postValue(null)
 
         viewModelScope.launch(Dispatchers.IO) {
             val round = protocolEngine.completeRound() ?: return@launch
@@ -279,6 +314,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             val (summary, patterns) = analysisEngine.analyzeDataset(totalRCount, totalECount, allFeatures)
             if (patterns.isNotEmpty()) {
                 db.featureDao().insertPatterns(patterns)
+                protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.patternDescriptor })
             }
             _researchSummary.postValue(summary)
             _totalRounds.postValue(totalRCount)

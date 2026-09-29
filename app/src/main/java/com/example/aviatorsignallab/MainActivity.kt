@@ -265,10 +265,52 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 sheet.tvSignalDetails.text = "Scientific verification: Testing pre-crash network activity vs random live control periods."
             }
         }
+
+        // Real-Time Instant Pre-Crash Signal Alert (Zero-Lag)
+        viewModel.preCrashAlert.observe(this) { alert ->
+            if (alert != null && alert.active) {
+                binding.bannerPreCrashAlert.visibility = View.VISIBLE
+                binding.tvAlertTitle.text = "⚠️ SIGNAL: FLEW AWAY IMMINENT (%.2fx)".format(alert.multiplier)
+                binding.tvAlertSubtitle.text = "Anomaly: ${alert.reason} | Confidence: ${alert.confidence}"
+
+                // Instant Haptic Vibration
+                triggerImmediateVibration()
+
+                // Highlight multiplier in intense crash rose
+                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                binding.tvBubbleStatus.text = "SIGNAL!"
+                binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+            } else {
+                binding.bannerPreCrashAlert.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun triggerImmediateVibration() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                vibratorManager?.defaultVibrator?.vibrate(android.os.VibrationEffect.createOneShot(200, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(android.os.VibrationEffect.createOneShot(200, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(200)
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun setupListeners() {
         val sheet = binding.bottomSheetResearch
+
+        binding.bannerPreCrashAlert.setOnClickListener {
+            binding.bannerPreCrashAlert.visibility = View.GONE
+        }
 
         binding.btnToggleBubble.setOnClickListener {
             toggleBubbleOverlayMode()

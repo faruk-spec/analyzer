@@ -32,6 +32,30 @@ class ProtocolDiscoveryEngine(
     private val observedTransports = mutableSetOf<String>()
     private val pendingRoundEvents = mutableListOf<LiveEvent>()
 
+    private var lastLiveTickTimestamp: Long = 0L
+    private var isPreCrashAlertFiredForRound: Boolean = false
+    private val rollingEventTypes = java.util.ArrayDeque<String>(8)
+    private val activeValidatedPatterns = mutableSetOf<String>()
+
+    fun updateValidatedPatterns(patterns: List<String>) {
+        synchronized(activeValidatedPatterns) {
+            activeValidatedPatterns.clear()
+            activeValidatedPatterns.addAll(patterns)
+        }
+    }
+
+    @Synchronized
+    fun checkInFlightGap(currentTime: Long) {
+        if (currentState == GameState.LIVE && !isPreCrashAlertFiredForRound && currentMultiplier >= 1.15 && lastLiveTickTimestamp > 0) {
+            val gap = currentTime - lastLiveTickTimestamp
+            // If stream pauses during active flight for >125ms, Spribe tick loop has halted to transition to crash
+            if (gap in 125..2000) {
+                isPreCrashAlertFiredForRound = true
+                listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "TICK_STREAM_QUIET_GAP_${gap}ms")
+            }
+        }
+    }
+
     private val multRegex1 = Regex("""([0-9]{1,4}\.[0-9]{1,2})\s*[xX]""")
     private val multRegex2 = Regex("""["'](?:multiplier|coefficient|coef|currmult)["']\s*[:=]\s*["']?([0-9]{1,4}\.[0-9]{1,2})["']?""", RegexOption.IGNORE_CASE)
 
@@ -55,6 +79,10 @@ class ProtocolDiscoveryEngine(
         val extractedRoundId = discoverRoundId(fieldMap)
         val isCrashSignal = detectCrashSignal(sanitized, fieldMap)
 
+        if (command == "85") {
+            lastLiveTickTimestamp = timestamp
+        }
+
         // 3. Robust State Transitions
         if (extractedRoundId != null && extractedRoundId != currentRoundId && !extractedRoundId.startsWith("rnd_")) {
             if (currentState == GameState.LIVE) {
@@ -74,6 +102,21 @@ class ProtocolDiscoveryEngine(
             handleMultiplierUpdate(extractedMultiplier, extractedRoundId, timestamp)
         } else if (extractedRoundId != null && extractedRoundId != currentRoundId && currentState != GameState.LIVE && currentState != GameState.UNKNOWN) {
             transitionToStart(extractedRoundId, timestamp)
+        }
+
+        // Live Pattern sequence matching during airborne flight
+        if (currentState == GameState.LIVE && !isPreCrashAlertFiredForRound && currentMultiplier >= 1.08) {
+            synchronized(rollingEventTypes) {
+                if (rollingEventTypes.size >= 8) rollingEventTypes.removeFirst()
+                rollingEventTypes.addLast(eventType)
+                val seq = rollingEventTypes.takeLast(4).joinToString("->")
+                synchronized(activeValidatedPatterns) {
+                    if (activeValidatedPatterns.any { seq.contains(it) || it.contains(seq) }) {
+                        isPreCrashAlertFiredForRound = true
+                        listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "PATTERN_MATCH:$seq")
+                    }
+                }
+            }
         }
 
         // 4. Construct LiveEvent
@@ -164,6 +207,10 @@ class ProtocolDiscoveryEngine(
         roundStartTime = timestamp
         lastCrashTimestamp = 0L
 
+        isPreCrashAlertFiredForRound = false
+        lastLiveTickTimestamp = 0L
+        synchronized(rollingEventTypes) { rollingEventTypes.clear() }
+
         activeRound = GameRound(
             roundId = newRoundId,
             startTime = timestamp,
@@ -187,6 +234,7 @@ class ProtocolDiscoveryEngine(
         currentState = GameState.CRASH
         lastCrashTimestamp = timestamp
         currentMultiplier = finalMultiplier
+        isPreCrashAlertFiredForRound = false
 
         activeRound?.let {
             it.endTime = timestamp
