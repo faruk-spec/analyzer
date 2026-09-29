@@ -4,8 +4,9 @@ object ScriptInjector {
 
     /**
      * Stealth client-side telemetry script.
-     * Hooks WebSocket (JSON, Blobs, ArrayBuffers), Canvas 2D fillText, Fetch, XHR, and DOM.
+     * Hooks WebSocket (JSON, Blobs, ArrayBuffers), Console, Canvas 2D fillText, Fetch, and XHR.
      * Extracts multipliers, round IDs, and crash signals in real-time across all frames.
+     * Prevents false updates on casino lobbies by isolating game frames.
      */
     val INJECTION_SCRIPT: String = """
         (function() {
@@ -51,6 +52,28 @@ object ScriptInjector {
                 } catch(e) {}
             }
 
+            // Report frame loading
+            try {
+                var currentHref = window.location.href || "";
+                var isTopFrame = (window.top === window);
+                safeLog("[IFRAME] Loaded: " + currentHref + " (isTop=" + isTopFrame + ")");
+                safeDispatch("IFRAME", "INTERNAL", JSON.stringify({
+                    url: currentHref,
+                    isTop: isTopFrame,
+                    title: document.title || ""
+                }), 0);
+            } catch(e) {}
+
+            function isGameContext() {
+                try {
+                    var href = (window.location.href || "").toLowerCase();
+                    if (href.indexOf('aviator') !== -1 || href.indexOf('spribe') !== -1) return true;
+                    // If inside an iframe and document has canvas
+                    if (window.top !== window && document.querySelector('canvas')) return true;
+                } catch(e) {}
+                return false;
+            }
+
             // Listener for cross-iframe forwarded events
             window.addEventListener('message', function(event) {
                 try {
@@ -62,7 +85,60 @@ object ScriptInjector {
                 } catch(e) {}
             });
 
-            // 1. Stealth Hook for WebSocket (Decodes Text, Blobs, and ArrayBuffers)
+            // 1. Console Interception (Captures console.log, info, warn, error)
+            try {
+                var origLog = console.log;
+                var origWarn = console.warn;
+                var origErr = console.error;
+                var origInfo = console.info;
+
+                function formatArgs(args) {
+                    var parts = [];
+                    for (var i = 0; i < args.length; i++) {
+                        var arg = args[i];
+                        if (typeof arg === 'object' && arg !== null) {
+                            try { parts.push(JSON.stringify(arg)); } catch(e) { parts.push(String(arg)); }
+                        } else {
+                            parts.push(String(arg));
+                        }
+                    }
+                    return parts.join(' ');
+                }
+
+                console.log = function() {
+                    try {
+                        var msg = formatArgs(arguments);
+                        safeLog("[CONSOLE_LOG] " + msg);
+                    } catch(e) {}
+                    return origLog.apply(console, arguments);
+                };
+
+                console.warn = function() {
+                    try {
+                        var msg = formatArgs(arguments);
+                        safeLog("[CONSOLE_WARN] " + msg);
+                    } catch(e) {}
+                    return origWarn.apply(console, arguments);
+                };
+
+                console.error = function() {
+                    try {
+                        var msg = formatArgs(arguments);
+                        safeLog("[CONSOLE_ERROR] " + msg);
+                    } catch(e) {}
+                    return origErr.apply(console, arguments);
+                };
+
+                console.info = function() {
+                    try {
+                        var msg = formatArgs(arguments);
+                        safeLog("[CONSOLE_INFO] " + msg);
+                    } catch(e) {}
+                    return origInfo.apply(console, arguments);
+                };
+            } catch(e) {}
+
+            // 2. Stealth Hook for WebSocket (Decodes Text, Blobs, and ArrayBuffers)
             if (window.WebSocket && !window.__aviatorWsHooked) {
                 window.__aviatorWsHooked = true;
                 var NativeWebSocket = window.WebSocket;
@@ -131,34 +207,34 @@ object ScriptInjector {
                 window.WebSocket = InstrumentedWebSocket;
             }
 
-            // 2. Canvas 2D Real-Time Multiplier & Crash Interceptor (Aviator plane renderer)
+            // 3. Canvas 2D Real-Time Multiplier & Crash Interceptor (Gated to Game Context)
             if (window.CanvasRenderingContext2D && !window.__aviatorCanvasHooked) {
                 window.__aviatorCanvasHooked = true;
                 var origFillText = CanvasRenderingContext2D.prototype.fillText;
                 var lastCanvasMult = "";
-                var canvasMultRegex = /([0-9]{1,4}\.[0-9]{1,2})\s*[xX]?/;
+                var strictCanvasMultRegex = /^\s*([0-9]{1,4}\.[0-9]{2})\s*[xX]\s*$/;
 
                 CanvasRenderingContext2D.prototype.fillText = function(text, x, y, maxWidth) {
                     try {
-                        if (typeof text === 'string' && text.length > 0 && text.length < 35) {
+                        if (typeof text === 'string' && text.length > 0 && text.length < 35 && isGameContext()) {
                             var trimmed = text.trim();
                             var upper = trimmed.toUpperCase();
-                            if (upper.indexOf("FLEW AWAY") !== -1 || upper.indexOf("CRASH") !== -1 || upper.indexOf("FLEW-AWAY") !== -1) {
+                            if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
                                 if (lastCanvasMult !== "CRASH") {
                                     lastCanvasMult = "CRASH";
-                                    safeDispatch("DOM", "INTERNAL", JSON.stringify({
+                                    safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
                                         type: "DOM_CRASH_SIGNAL",
                                         status: "crash",
                                         rawText: trimmed
                                     }), trimmed.length);
                                 }
                             } else {
-                                var match = canvasMultRegex.exec(trimmed);
+                                var match = strictCanvasMultRegex.exec(trimmed);
                                 if (match && match[1]) {
                                     var num = parseFloat(match[1]);
                                     if (num >= 1.0 && num <= 100000.0 && match[1] !== lastCanvasMult) {
                                         lastCanvasMult = match[1];
-                                        safeDispatch("DOM", "INTERNAL", JSON.stringify({
+                                        safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
                                             type: "DOM_MULTIPLIER_UPDATE",
                                             multiplier: match[1],
                                             rawText: trimmed
@@ -172,14 +248,15 @@ object ScriptInjector {
                 };
             }
 
-            // 3. Stealth Hook for Fetch
+            // 4. Stealth Hook for Fetch
             if (window.fetch && !window.__aviatorFetchHooked) {
                 window.__aviatorFetchHooked = true;
                 var origFetch = window.fetch;
                 window.fetch = function() {
                     var args = arguments;
+                    var url = "";
                     try {
-                        var url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : "");
+                        url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : "");
                         var options = args[1] || {};
                         var method = options.method || "GET";
 
@@ -194,7 +271,8 @@ object ScriptInjector {
                             var clone = response.clone();
                             clone.text().then(function(bodyText) {
                                 if (bodyText && bodyText.length > 0 && bodyText.length < 50000) {
-                                    if (bodyText.indexOf('multiplier') !== -1 || bodyText.indexOf('crash') !== -1 || bodyText.indexOf('round') !== -1 || (url && url.indexOf('game') !== -1)) {
+                                    var lower = bodyText.toLowerCase();
+                                    if (lower.indexOf('multiplier') !== -1 || lower.indexOf('crash') !== -1 || lower.indexOf('round') !== -1 || (url && url.toLowerCase().indexOf('aviator') !== -1)) {
                                         safeDispatch("FETCH", "INCOMING", bodyText, bodyText.length);
                                     }
                                 }
@@ -209,7 +287,7 @@ object ScriptInjector {
                 } catch(e) {}
             }
 
-            // 4. Stealth Hook for XMLHttpRequest
+            // 5. Stealth Hook for XMLHttpRequest
             if (window.XMLHttpRequest && !window.__aviatorXhrHooked) {
                 window.__aviatorXhrHooked = true;
                 var OrigXHR = window.XMLHttpRequest;
@@ -236,7 +314,8 @@ object ScriptInjector {
                             try {
                                 var text = self.responseText;
                                 if (text && text.length > 0 && text.length < 50000) {
-                                    if (text.indexOf('multiplier') !== -1 || text.indexOf('crash') !== -1 || text.indexOf('round') !== -1 || (self.__xhrUrl && self.__xhrUrl.indexOf('game') !== -1)) {
+                                    var lower = text.toLowerCase();
+                                    if (lower.indexOf('multiplier') !== -1 || lower.indexOf('crash') !== -1 || lower.indexOf('round') !== -1 || (self.__xhrUrl && self.__xhrUrl.toLowerCase().indexOf('aviator') !== -1)) {
                                         safeDispatch("XHR", "INCOMING", text, text.length);
                                     }
                                 }
@@ -247,65 +326,6 @@ object ScriptInjector {
                     return origSend.apply(this, arguments);
                 };
             }
-
-            // 5. Visual Multiplier, Round ID & State Scanner
-            var lastDomMultiplier = "";
-            var lastDomRoundId = "";
-            var domMultRegex = /([0-9]{1,4}\.[0-9]{1,2})\s*[xX]?/;
-            var domRoundRegex = /(?:round|issue|#|game|id)\s*[:#]?\s*([0-9]{5,15})/i;
-
-            setInterval(function() {
-                try {
-                    var doc = document;
-                    var els = doc.querySelectorAll('div, span, p, h1, h2, h3, text, b, strong, em, [class*="stage"], [class*="crash"], [class*="payout"], [class*="multiplier"], [class*="odds"], [class*="flew"], [class*="bubble"]');
-                    for (var i = 0; i < els.length; i++) {
-                        var text = els[i].innerText || els[i].textContent;
-                        if (!text || text.length > 40) continue;
-
-                        var trimmed = text.trim();
-
-                        // Scan for Round ID
-                        var rMatch = domRoundRegex.exec(trimmed);
-                        if (rMatch && rMatch[1] && rMatch[1] !== lastDomRoundId) {
-                            lastDomRoundId = rMatch[1];
-                            safeDispatch("DOM", "INTERNAL", JSON.stringify({
-                                type: "DOM_ROUND_ID_UPDATE",
-                                round_id: rMatch[1],
-                                rawText: trimmed
-                            }), trimmed.length);
-                        }
-
-                        // Scan for Multiplier
-                        var mMatch = domMultRegex.exec(trimmed);
-                        if (mMatch && mMatch[1]) {
-                            var n = parseFloat(mMatch[1]);
-                            if (n >= 1.0 && n <= 100000.0 && mMatch[1] !== lastDomMultiplier) {
-                                lastDomMultiplier = mMatch[1];
-                                safeDispatch("DOM", "INTERNAL", JSON.stringify({
-                                    type: "DOM_MULTIPLIER_UPDATE",
-                                    multiplier: mMatch[1],
-                                    rawText: trimmed
-                                }), trimmed.length);
-                                break;
-                            }
-                        }
-
-                        // Scan for Crash keyword
-                        var lower = trimmed.toLowerCase();
-                        if (lower.indexOf("flew away") !== -1 || lower.indexOf("crashed") !== -1 || lower.indexOf("flew-away") !== -1) {
-                            if (lastDomMultiplier !== "CRASH") {
-                                lastDomMultiplier = "CRASH";
-                                safeDispatch("DOM", "INTERNAL", JSON.stringify({
-                                    type: "DOM_CRASH_SIGNAL",
-                                    status: "crash",
-                                    rawText: trimmed
-                                }), trimmed.length);
-                                break;
-                            }
-                        }
-                    }
-                } catch(e) {}
-            }, 100);
 
         })();
     """.trimIndent()

@@ -12,6 +12,7 @@ import com.example.aviatorsignallab.export.ZipExportManager
 import com.example.aviatorsignallab.model.GameRound
 import com.example.aviatorsignallab.model.LiveEvent
 import com.example.aviatorsignallab.model.ResearchSummary
+import com.example.aviatorsignallab.model.TrafficItem
 import com.example.aviatorsignallab.protocol.GameState
 import com.example.aviatorsignallab.protocol.ProtocolDiscoveryEngine
 import com.example.aviatorsignallab.protocol.StateChangeListener
@@ -34,7 +35,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     val webhookSyncManager = com.example.aviatorsignallab.sync.WebhookSyncManager(application)
 
     // UI LiveData states
-    private val _connectionStatus = MutableLiveData("DISCONNECTED")
+    private val _connectionStatus = MutableLiveData("STANDBY")
     val connectionStatus: LiveData<String> = _connectionStatus
 
     private val _totalRounds = MutableLiveData(0)
@@ -60,6 +61,11 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     private val _diagnosticsLog = MutableLiveData<List<String>>(emptyList())
     val diagnosticsLog: LiveData<List<String>> = _diagnosticsLog
+
+    // Traffic Inspector LiveData & buffer
+    private val _trafficItems = MutableLiveData<List<TrafficItem>>(emptyList())
+    val trafficItems: LiveData<List<TrafficItem>> = _trafficItems
+    private val trafficBuffer = mutableListOf<TrafficItem>()
 
     private val logs = mutableListOf<String>()
     var isPaused: Boolean = false
@@ -115,9 +121,25 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             "FETCH" -> fetchCount++
             "XHR" -> xhrCount++
             "POST_MESSAGE" -> postMsgCount++
-            "DOM" -> domCount++
+            "DOM", "CANVAS" -> domCount++
         }
         recentEventCounter.incrementAndGet()
+
+        val safePayload = payload ?: ""
+        val item = TrafficItem(
+            transport = transport,
+            direction = direction,
+            payload = safePayload,
+            size = size.coerceAtLeast(safePayload.length)
+        )
+
+        synchronized(trafficBuffer) {
+            if (trafficBuffer.size >= 300) {
+                trafficBuffer.removeAt(0)
+            }
+            trafficBuffer.add(item)
+            _trafficItems.postValue(trafficBuffer.toList())
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             val event = protocolEngine.processRawEvent(transport, direction, payload)
@@ -134,6 +156,78 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             logs.add("[${System.currentTimeMillis()}] $message")
             _diagnosticsLog.postValue(logs.toList())
         }
+
+        // If diagnostic is console or internal probe, also add to Traffic Inspector
+        val transport = when {
+            message.startsWith("[CONSOLE_LOG]") -> "CONSOLE"
+            message.startsWith("[CONSOLE_WARN]") -> "CONSOLE"
+            message.startsWith("[CONSOLE_ERROR]") -> "CONSOLE"
+            message.startsWith("[CONSOLE_INFO]") -> "CONSOLE"
+            message.startsWith("[IFRAME]") -> "IFRAME"
+            else -> "INTERNAL"
+        }
+        val direction = when {
+            message.startsWith("[CONSOLE_WARN]") -> "WARN"
+            message.startsWith("[CONSOLE_ERROR]") -> "ERROR"
+            message.startsWith("[CONSOLE_INFO]") -> "INFO"
+            else -> "LOG"
+        }
+        val cleanMsg = message.substringAfter("] ").trim()
+        val item = TrafficItem(
+            transport = transport,
+            direction = direction,
+            payload = cleanMsg,
+            size = cleanMsg.length
+        )
+        synchronized(trafficBuffer) {
+            if (trafficBuffer.size >= 300) {
+                trafficBuffer.removeAt(0)
+            }
+            trafficBuffer.add(item)
+            _trafficItems.postValue(trafficBuffer.toList())
+        }
+    }
+
+    fun clearTraffic() {
+        synchronized(trafficBuffer) {
+            trafficBuffer.clear()
+            _trafficItems.postValue(emptyList())
+        }
+    }
+
+    fun getTrafficExportText(filter: String = "", category: String = "ALL"): String {
+        val list = synchronized(trafficBuffer) { trafficBuffer.toList() }
+        val filtered = list.filter { item ->
+            val matchCategory = when (category) {
+                "ALL" -> true
+                "WEBSOCKET" -> item.transport.equals("WEBSOCKET", ignoreCase = true)
+                "CONSOLE" -> item.transport.equals("CONSOLE", ignoreCase = true)
+                "NETWORK" -> item.transport.equals("FETCH", ignoreCase = true) || item.transport.equals("XHR", ignoreCase = true)
+                "DOM" -> item.transport.equals("DOM", ignoreCase = true) || item.transport.equals("CANVAS", ignoreCase = true)
+                else -> true
+            }
+
+            val matchQuery = if (filter.isEmpty()) {
+                true
+            } else {
+                item.payload.contains(filter, ignoreCase = true) ||
+                        item.transport.contains(filter, ignoreCase = true) ||
+                        item.direction.contains(filter, ignoreCase = true)
+            }
+
+            matchCategory && matchQuery
+        }
+
+        val sb = StringBuilder()
+        sb.append("=== AVIATOR SIGNAL LAB TRAFFIC DUMP ===\n")
+        sb.append("Total Packets: ${filtered.size}\n")
+        sb.append("Filter: '$filter' | Category: '$category'\n\n")
+
+        for (item in filtered) {
+            sb.append("[${item.getFormattedTime()}] [${item.transport}] [${item.direction}] (${item.size} B)\n")
+            sb.append(item.payload).append("\n\n")
+        }
+        return sb.toString()
     }
 
     override fun onStateChanged(previousState: GameState, newState: GameState, currentRoundId: String, multiplier: Double) {

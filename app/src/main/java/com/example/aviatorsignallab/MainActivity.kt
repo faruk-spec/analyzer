@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.aviatorsignallab.databinding.ActivityMainBinding
 import com.example.aviatorsignallab.ui.DiagnosticsDialog
 import com.example.aviatorsignallab.ui.ResearchViewModel
+import com.example.aviatorsignallab.ui.TrafficInspectorDialog
 import com.example.aviatorsignallab.update.ApkInstaller
 import com.example.aviatorsignallab.update.ReleaseMetadata
 import com.example.aviatorsignallab.update.UpdateCheckResult
@@ -128,6 +129,9 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
     private fun observeViewModel() {
         viewModel.connectionStatus.observe(this) { status ->
             binding.tvConnectionStatus.text = status
+            if (status == "STANDBY" || viewModel.currentRoundId.value == "--") {
+                binding.tvMetricMultiplier.text = "--"
+            }
             when (status) {
                 "OBSERVING" -> {
                     binding.tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
@@ -157,10 +161,17 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         viewModel.currentRoundId.observe(this) { roundId ->
             binding.tvMetricCurRound.text = roundId
+            if (roundId == "--" || viewModel.connectionStatus.value == "STANDBY") {
+                binding.tvMetricMultiplier.text = "--"
+            }
         }
 
         viewModel.currentMultiplier.observe(this) { mult ->
-            binding.tvMetricMultiplier.text = "%.2fx".format(mult)
+            if (viewModel.connectionStatus.value == "STANDBY" || viewModel.currentRoundId.value == "--") {
+                binding.tvMetricMultiplier.text = "--"
+            } else {
+                binding.tvMetricMultiplier.text = "%.2fx".format(mult)
+            }
         }
 
         viewModel.elapsedSeconds.observe(this) { sec ->
@@ -198,7 +209,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         val sheet = binding.bottomSheetResearch
 
         binding.btnOpenDiagnostics.setOnClickListener {
-            DiagnosticsDialog(this, viewModel).show()
+            TrafficInspectorDialog(this, viewModel).show()
         }
 
         binding.btnCheckUpdate.setOnClickListener {

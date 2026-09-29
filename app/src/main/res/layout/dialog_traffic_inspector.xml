@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Header Strip -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🔍 Live Traffic &amp; Console Inspector"
+            android:textColor="@color/accent_cyan"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvTrafficStats"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 packets"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Search / Filter Input -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilTrafficFilter"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:hint="Filter packets (e.g. multiplier, round, spribe, crash)..."
+        app:boxStrokeColor="@color/accent_cyan"
+        app:hintTextColor="@color/accent_cyan">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etTrafficFilter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:singleLine="true"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Filter Category Chips -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFilterAll"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:text="ALL"
+                android:textSize="11sp"
+                android:textColor="@color/accent_cyan"
+                app:strokeColor="@color/accent_cyan" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFilterWebSocket"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:text="WEBSOCKET"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                app:strokeColor="@color/bg_card_border" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFilterConsole"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:text="CONSOLE"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                app:strokeColor="@color/bg_card_border" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFilterNetwork"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:text="FETCH/XHR"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                app:strokeColor="@color/bg_card_border" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFilterDOM"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="DOM/CANVAS"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                app:strokeColor="@color/bg_card_border" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Scrollable Monospace Logs Area -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollTraffic"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@drawable/bg_card"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/tvTrafficLogs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="Listening for game network traffic, WebSockets, and console messages..."
+            android:textColor="@color/text_primary"
+            android:textSize="11sp" />
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Bottom Actions -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnClearTraffic"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Clear"
+            android:textSize="11sp"
+            android:textColor="@color/accent_rose"
+            app:backgroundTint="@color/bg_card"
+            app:strokeColor="@color/accent_rose"
+            app:strokeWidth="1dp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCloseTraffic"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:text="Close"
+            android:textSize="11sp"
+            android:textColor="@color/text_muted"
+            app:backgroundTint="@color/bg_secondary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCopyTraffic"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📋 Copy Traffic"
+            android:textSize="11sp"
+            android:textColor="@color/bg_primary"
+            android:textStyle="bold"
+            app:backgroundTint="@color/accent_cyan" />
+    </LinearLayout>
+
+</LinearLayout>

@@ -14,7 +14,7 @@ class ProtocolDiscoveryEngine(
     var currentState: GameState = GameState.UNKNOWN
         private set
 
-    var currentRoundId: String = "rnd_init_0"
+    var currentRoundId: String = "--"
         private set
 
     var currentMultiplier: Double = 1.00
@@ -33,7 +33,7 @@ class ProtocolDiscoveryEngine(
     private val pendingRoundEvents = mutableListOf<LiveEvent>()
 
     private val multRegex1 = Regex("""([0-9]{1,4}\.[0-9]{1,2})\s*[xX]""")
-    private val multRegex2 = Regex("""["']?(?:multiplier|coef|coefficient|odds|rate|val|x)["']?\s*[:=]\s*["']?([0-9]{1,4}\.[0-9]{1,2})["']?""", RegexOption.IGNORE_CASE)
+    private val multRegex2 = Regex("""["']?(?:multiplier|coef|coefficient|odds|currmult)["']?\s*[:=]\s*["']?([0-9]{1,4}\.[0-9]{1,2})["']?""", RegexOption.IGNORE_CASE)
 
     @Synchronized
     fun processRawEvent(
@@ -67,7 +67,7 @@ class ProtocolDiscoveryEngine(
             handleMultiplierUpdate(extractedMultiplier, extractedRoundId, timestamp)
         } else if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
             transitionToCrash(timestamp, currentMultiplier)
-        } else if (extractedRoundId != null && extractedRoundId != currentRoundId && currentState != GameState.LIVE) {
+        } else if (extractedRoundId != null && extractedRoundId != currentRoundId && currentState != GameState.LIVE && currentState != GameState.UNKNOWN) {
             transitionToStart(extractedRoundId, timestamp)
         }
 
@@ -111,10 +111,13 @@ class ProtocolDiscoveryEngine(
     private fun handleMultiplierUpdate(newMultiplier: Double, roundIdCandidate: String?, timestamp: Long) {
         when (currentState) {
             GameState.UNKNOWN -> {
-                val rid = roundIdCandidate ?: "rnd_${syntheticRoundCounter.getAndIncrement()}"
-                transitionToStart(rid, timestamp)
-                currentMultiplier = newMultiplier
-                transitionToLive()
+                // Do not create false synthetic rounds on casino lobby.
+                // Only start if an authentic round ID is present.
+                if (roundIdCandidate != null && !roundIdCandidate.startsWith("rnd_")) {
+                    transitionToStart(roundIdCandidate, timestamp)
+                    currentMultiplier = newMultiplier
+                    transitionToLive()
+                }
             }
             GameState.ROUND_START -> {
                 currentMultiplier = newMultiplier
@@ -237,17 +240,17 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun discoverCommand(fields: Map<String, String>): String? {
-        for (key in listOf("command", "cmd", "opcode", "op", "code", "id")) {
+        for (key in listOf("command", "cmd", "opcode", "op", "code")) {
             fields[key]?.let { if (it.isNotBlank()) return it }
         }
         return null
     }
 
     private fun discoverMultiplier(sanitized: String, fields: Map<String, String>): Double? {
-        // 1. Direct field checking across all field paths (nested and top-level)
+        // 1. Direct field checking across explicit multiplier keys
         for ((path, v) in fields) {
             val key = path.substringAfterLast(".").substringBefore("[").lowercase()
-            if (key in listOf("multiplier", "rate", "coefficient", "odds", "coef", "mult", "currmult", "finalmult", "f", "m", "c", "x", "val", "v", "text", "rawtext")) {
+            if (key in listOf("multiplier", "coefficient", "coef", "odds", "currmult", "finalmult")) {
                 val cleaned = v.replace("x", "", ignoreCase = true).replace("@", "").trim()
                 cleaned.toDoubleOrNull()?.let { num ->
                     if (num in 1.0..100000.0) return num
@@ -261,7 +264,7 @@ class ProtocolDiscoveryEngine(
             m1.groupValues[1].toDoubleOrNull()?.let { return it }
         }
 
-        // 3. Regex pattern 2: "multiplier": 1.45
+        // 3. Regex pattern 2: "multiplier": 1.45 or "coefficient": 1.45
         val m2 = multRegex2.find(sanitized)
         if (m2 != null) {
             m2.groupValues[1].toDoubleOrNull()?.let { return it }
@@ -280,8 +283,13 @@ class ProtocolDiscoveryEngine(
         for ((path, v) in fields) {
             if (v.isBlank() || v == "[REDACTED]" || v == "null" || v == "0") continue
             val key = path.substringAfterLast(".").substringBefore("[").lowercase()
-            if (key in listOf("round_id", "roundid", "rid", "game_id", "gameid", "round", "issuenumber", "issue", "stage_id", "id")) {
+            if (key in listOf("round_id", "roundid", "game_round_id", "round_number", "roundno")) {
                 if (v.length in 3..40 && !v.equals("true", ignoreCase = true) && !v.equals("false", ignoreCase = true)) {
+                    return v
+                }
+            } else if (key in listOf("game_id", "gameid")) {
+                // Must be an instance/round identifier (e.g. numeric ID >= 5 digits or containing dash)
+                if (v.length >= 5 && v.any { it.isDigit() }) {
                     return v
                 }
             }
