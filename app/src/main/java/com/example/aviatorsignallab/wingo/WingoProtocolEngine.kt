@@ -301,9 +301,14 @@ class WingoProtocolEngine(
 
     fun updateRoomIssue(room: WingoRoom, period: String, remainingSeconds: Int, isLocked: Boolean) {
         val state = roomStates[room] ?: return
+        val periodChanged = state.currentPeriod != period
         state.currentPeriod = period
         state.remainingSeconds = remainingSeconds
         state.isLocked = isLocked
+
+        if (periodChanged && state.history.isNotEmpty()) {
+            state.prediction = WingoTrendAnalyzer.predictNextBet(state.history, period)
+        }
 
         val issue = WingoIssueInfo(period, remainingSeconds, isLocked, room)
         if (room == activeRoom) {
@@ -328,7 +333,7 @@ class WingoProtocolEngine(
 
         state.trendSummary = WingoTrendAnalyzer.analyzeTrends(state.history)
         state.transitions = WingoTrendAnalyzer.calculateTransitions(state.history)
-        state.prediction = WingoTrendAnalyzer.predictNextBet(state.history)
+        state.prediction = WingoTrendAnalyzer.predictNextBet(state.history, state.currentPeriod)
 
         val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
         if (room == activeRoom) {
@@ -349,7 +354,7 @@ class WingoProtocolEngine(
 
         state.trendSummary = WingoTrendAnalyzer.analyzeTrends(snapshot)
         state.transitions = WingoTrendAnalyzer.calculateTransitions(snapshot)
-        state.prediction = WingoTrendAnalyzer.predictNextBet(snapshot)
+        state.prediction = WingoTrendAnalyzer.predictNextBet(snapshot, state.currentPeriod)
 
         val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
         if (room == activeRoom) {

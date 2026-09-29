@@ -519,13 +519,25 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 ContextCompat.getColor(this, R.color.wingo_small)
             }
 
-            // Top HUD Bar Prediction Badge: show prefix based on safety tier
+            val actionTag = when (pred.actionType) {
+                "REVERSAL_FLIP" -> "FLIP"
+                "CHOP_ALTERNATION" -> "CHOP"
+                "MEAN_REVERSION" -> "MEAN"
+                "DRAGON_REVERSAL" -> "FADE"
+                "DRAGON_CONTINUATION" -> "DRAGON"
+                "DOUBLE_PAIR_FLIP" -> "P-FLIP"
+                "PAIR_REPEAT" -> "PAIR"
+                "TREND_CONTINUATION" -> "TREND"
+                else -> "AI"
+            }
+
+            // Top HUD Bar Prediction Badge: show prefix based on safety tier & action tag
             val prefix = when (pred.safetyTier) {
                 "HIGH CONFIDENCE" -> "⚡ BET:"
                 "MODERATE" -> "🎯 BET:"
                 else -> "⚠️ SKIP:"
             }
-            binding.tvWingoTopPrediction.text = "$prefix ${pred.recommendedSize} [${pred.confidencePct}%]"
+            binding.tvWingoTopPrediction.text = "$prefix ${pred.recommendedSize} [$actionTag ${pred.confidencePct}%]"
             if (pred.safetyTier == "CAUTION / SKIP") {
                 binding.tvWingoTopPrediction.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
             } else {
@@ -534,7 +546,11 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
             // Bottom Sheet AI Prediction Card
             val sheet = binding.bottomSheetResearch
-            sheet.tvSheetPredSize.text = "🎯 BET: ${pred.recommendedSize}"
+            sheet.tvSheetPredTargetPeriod.text = "FOR ROUND: #${pred.targetPeriod}"
+            sheet.tvSheetPredLastResult.text = pred.lastResultSummary
+
+            val actionDisplay = pred.actionType.replace("_", " ")
+            sheet.tvSheetPredSize.text = "🎯 BET: ${pred.recommendedSize} [$actionDisplay]"
             sheet.tvSheetPredSize.setTextColor(sizeColor)
 
             val colorRes = if (pred.recommendedColor.contains("GREEN")) R.color.wingo_green else R.color.wingo_red

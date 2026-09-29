@@ -189,6 +189,39 @@
                             android:textStyle="bold" />
                     </LinearLayout>
 
+                    <!-- Target Period vs Analyzed Period Bar -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:background="#0A1428"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/tvSheetPredTargetPeriod"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="FOR ROUND: #-------------"
+                            android:textColor="@color/accent_cyan"
+                            android:fontFamily="monospace"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSheetPredLastResult"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="LAST: --"
+                            android:textColor="@color/text_muted"
+                            android:textSize="9sp" />
+                    </LinearLayout>
+
                     <!-- Hero Prediction Row -->
                     <LinearLayout
                         android:layout_width="match_parent"

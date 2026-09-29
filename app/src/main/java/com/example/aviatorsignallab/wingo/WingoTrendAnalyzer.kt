@@ -151,7 +151,10 @@ object WingoTrendAnalyzer {
         val safetyTier: String,                  // "HIGH CONFIDENCE", "MODERATE", "CAUTION / SKIP"
         val patternName: String = "MULTI_MODEL_CONSENSUS",
         val recommendedNumbers: List<Int> = emptyList(),
-        val modelConsensus: String = ""
+        val modelConsensus: String = "",
+        val targetPeriod: String = "--",
+        val lastResultSummary: String = "--",
+        val actionType: String = "NEUTRAL"       // "REVERSAL_FLIP", "TREND_CONTINUATION", "CHOP_ALTERNATION", "MEAN_REVERSION", etc.
     )
 
     private data class SubModelVote(
@@ -166,18 +169,49 @@ object WingoTrendAnalyzer {
      * Integrates:
      *  1. Historical k-Gram Pattern Matching (Scanning previous identical 3/4-sequences)
      *  2. Structural Chart Archetypes (Double-Double 2-2, Chop 1-1, Mirror 1-2-1, Dragon Rider/Reversal)
-     *  3. Order-2 Markov State Transitions (Conditional bigram/trigram probabilities)
-     *  4. Rolling Window Parity Imbalance & Mean Reversion
-     *  5. Color Transition Cycles & Number Due/Hot Heuristics
+     *  3. Order-2 & Order-1 Markov State Transitions (Conditional bigram/trigram probabilities)
+     *  4. Rolling Window Parity Imbalance & Dynamic Mean Reversion
+     *  5. Numerical Digit Cluster & Momentum Oscillator
+     *  6. Anti-Echo Decoupling (prevents blindly echoing previous round)
      */
-    fun predictNextBet(results: List<WingoProtocolEngine.WingoDrawResult>): BetPrediction {
+    fun predictNextBet(
+        results: List<WingoProtocolEngine.WingoDrawResult>,
+        activeTargetPeriod: String = "--"
+    ): BetPrediction {
+        // Derive Target Period
+        val computedTargetPeriod = if (activeTargetPeriod != "--" && activeTargetPeriod.isNotBlank()) {
+            activeTargetPeriod
+        } else if (results.isNotEmpty()) {
+            val lastPeriod = results.first().periodId
+            try {
+                val num = lastPeriod.toLong()
+                (num + 1).toString()
+            } catch (e: Exception) {
+                if (lastPeriod != "--") "$lastPeriod (+1)" else "--"
+            }
+        } else {
+            "--"
+        }
+
+        // Derive Last Result Summary
+        val lastResultSummary = if (results.isNotEmpty()) {
+            val last = results.first()
+            val shortId = if (last.periodId.length > 5) "...${last.periodId.takeLast(4)}" else last.periodId
+            "LAST #$shortId: ${last.size} (${last.number}, ${last.color})"
+        } else {
+            "LAST: Awaiting draws"
+        }
+
         if (results.isEmpty()) {
             return BetPrediction(
                 recommendedSize = "BIG",
                 confidencePct = 50,
                 reasoning = "Awaiting initial draws for room",
                 recommendedColor = "GREEN",
-                safetyTier = "NEUTRAL"
+                safetyTier = "CAUTION / SKIP",
+                targetPeriod = computedTargetPeriod,
+                lastResultSummary = lastResultSummary,
+                actionType = "NEUTRAL"
             )
         }
 
@@ -186,6 +220,12 @@ object WingoTrendAnalyzer {
         val total = chrono.size
         val latest = chrono.last()
         val votes = mutableListOf<SubModelVote>()
+
+        // Active streak ending at latest
+        var activeStreakLen = 1
+        for (i in total - 1 downTo 1) {
+            if (chrono[i].size == chrono[i - 1].size) activeStreakLen++ else break
+        }
 
         // -------------------------------------------------------------
         // SUB-MODEL 1: Historical k-Gram Sequence Matcher (Pattern Search)
@@ -206,13 +246,30 @@ object WingoTrendAnalyzer {
         }
 
         // -------------------------------------------------------------
-        // SUB-MODEL 3: Order-2 Markov Transition Probabilities
+        // SUB-MODEL 3: Markov Order-1 & Order-2 Transition Probabilities
         // -------------------------------------------------------------
         if (total >= 10) {
             val markovVote = calculateMarkovOrder2(chrono)
             if (markovVote != null) {
                 votes.add(markovVote)
             }
+        }
+        val trans = calculateTransitions(results)
+        val basicMarkovVote = if (latest.size == "BIG") {
+            if (trans.afterBigNextSmallPct >= 56.0) {
+                SubModelVote("SMALL", 2.0, "MARKOV_FLIP", "Markov Flip: ${trans.afterBigNextSmallPct.roundToInt()}% flip to Small")
+            } else if (trans.afterBigNextBigPct >= 58.0 && activeStreakLen < 4) {
+                SubModelVote("BIG", 1.7, "MARKOV_REPEAT", "Markov Repeat: ${trans.afterBigNextBigPct.roundToInt()}% repeat Big")
+            } else null
+        } else {
+            if (trans.afterSmallNextBigPct >= 56.0) {
+                SubModelVote("BIG", 2.0, "MARKOV_FLIP", "Markov Flip: ${trans.afterSmallNextBigPct.roundToInt()}% flip to Big")
+            } else if (trans.afterSmallNextSmallPct >= 58.0 && activeStreakLen < 4) {
+                SubModelVote("SMALL", 1.7, "MARKOV_REPEAT", "Markov Repeat: ${trans.afterSmallNextSmallPct.roundToInt()}% repeat Small")
+            } else null
+        }
+        if (basicMarkovVote != null) {
+            votes.add(basicMarkovVote)
         }
 
         // -------------------------------------------------------------
@@ -224,24 +281,11 @@ object WingoTrendAnalyzer {
         }
 
         // -------------------------------------------------------------
-        // SUB-MODEL 5: Trend Summary & Basic Transition Direction
+        // SUB-MODEL 5: Numerical Digit Cluster Oscillator
         // -------------------------------------------------------------
-        val trans = calculateTransitions(results)
-        val basicMarkovVote = if (latest.size == "BIG") {
-            if (trans.afterBigNextSmallPct >= 57.0) {
-                SubModelVote("SMALL", 1.8, "MARKOV_FLIP", "Markov Flip: ${trans.afterBigNextSmallPct.roundToInt()}% flip to Small")
-            } else if (trans.afterBigNextBigPct >= 57.0) {
-                SubModelVote("BIG", 1.8, "MARKOV_REPEAT", "Markov Repeat: ${trans.afterBigNextBigPct.roundToInt()}% repeat Big")
-            } else null
-        } else {
-            if (trans.afterSmallNextBigPct >= 57.0) {
-                SubModelVote("BIG", 1.8, "MARKOV_FLIP", "Markov Flip: ${trans.afterSmallNextBigPct.roundToInt()}% flip to Big")
-            } else if (trans.afterSmallNextSmallPct >= 57.0) {
-                SubModelVote("SMALL", 1.8, "MARKOV_REPEAT", "Markov Repeat: ${trans.afterSmallNextSmallPct.roundToInt()}% repeat Small")
-            } else null
-        }
-        if (basicMarkovVote != null) {
-            votes.add(basicMarkovVote)
+        val digitVote = calculateDigitOscillator(chrono)
+        if (digitVote != null) {
+            votes.add(digitVote)
         }
 
         // -------------------------------------------------------------
@@ -271,44 +315,95 @@ object WingoTrendAnalyzer {
         val dominantVotes: Int
         val primaryPattern: String
         val primaryReason: String
+        val isEquilibrium: Boolean
 
-        if (weightBig >= weightSmall) {
+        val diff = kotlin.math.abs(weightBig - weightSmall)
+        if (diff < 0.35 || totalWeight == 0.0) {
+            // Models in equilibrium or no dominant direction -> Do NOT blindly default to BIG!
+            // Apply balanced mean correction from recent 20 draws:
+            val recent20 = chrono.takeLast(20)
+            val bigCount20 = recent20.count { it.size == "BIG" }
+            val smallCount20 = recent20.count { it.size == "SMALL" }
+
+            if (bigCount20 > smallCount20) {
+                recommendedSize = "SMALL"
+                dominantWeight = 1.5
+                dominantVotes = 1
+                primaryPattern = "EQUILIBRIUM_MEAN_BALANCE"
+                primaryReason = "Equilibrium: Big over-represented ($bigCount20/$smallCount20 in 20) • Recommending Small"
+                isEquilibrium = true
+            } else if (smallCount20 > bigCount20) {
+                recommendedSize = "BIG"
+                dominantWeight = 1.5
+                dominantVotes = 1
+                primaryPattern = "EQUILIBRIUM_MEAN_BALANCE"
+                primaryReason = "Equilibrium: Small over-represented ($smallCount20/$bigCount20 in 20) • Recommending Big"
+                isEquilibrium = true
+            } else {
+                // Exact 50-50 tie: alternate from latest
+                recommendedSize = if (latest.size == "BIG") "SMALL" else "BIG"
+                dominantWeight = 1.0
+                dominantVotes = 1
+                primaryPattern = "EQUILIBRIUM_CHOP"
+                primaryReason = "Perfect 50/50 balance • Proposing alternate flip to $recommendedSize"
+                isEquilibrium = true
+            }
+        } else if (weightBig > weightSmall) {
             recommendedSize = "BIG"
             dominantWeight = weightBig
             dominantVotes = bigVotesCount
             val topVote = votes.filter { it.targetSize == "BIG" }.maxByOrNull { it.weight }
             primaryPattern = topVote?.patternName ?: "TREND_MOMENTUM"
-            primaryReason = topVote?.reason ?: "Weighted Ensemble favors Big"
+            primaryReason = topVote?.reason ?: "Multi-model consensus projects Big"
+            isEquilibrium = false
         } else {
             recommendedSize = "SMALL"
             dominantWeight = weightSmall
             dominantVotes = smallVotesCount
             val topVote = votes.filter { it.targetSize == "SMALL" }.maxByOrNull { it.weight }
             primaryPattern = topVote?.patternName ?: "TREND_MOMENTUM"
-            primaryReason = topVote?.reason ?: "Weighted Ensemble favors Small"
+            primaryReason = topVote?.reason ?: "Multi-model consensus projects Small"
+            isEquilibrium = false
         }
 
         val consensusRatio = if (totalWeight > 0.0) dominantWeight / totalWeight else 0.5
         val totalActiveModels = votes.count { it.targetSize == "BIG" || it.targetSize == "SMALL" }
-        val modelConsensus = "$dominantVotes/$totalActiveModels Models Agree"
+        val modelConsensus = if (isEquilibrium) "Balanced Split (Equilibrium)" else "$dominantVotes/$totalActiveModels Models Agree"
 
         // Calibrate Safety Tier and Confidence
         val safetyTier: String
         val confidencePct: Int
         val finalReason: String
 
-        if (consensusRatio >= 0.74 && dominantVotes >= 2) {
+        if (!isEquilibrium && consensusRatio >= 0.72 && dominantVotes >= 2) {
             safetyTier = "HIGH CONFIDENCE"
-            confidencePct = (78 + (consensusRatio - 0.74) * 55).roundToInt().coerceIn(78, 92)
+            confidencePct = (78 + (consensusRatio - 0.72) * 50).roundToInt().coerceIn(78, 92)
             finalReason = primaryReason
-        } else if (consensusRatio >= 0.60) {
+        } else if (!isEquilibrium && consensusRatio >= 0.58) {
             safetyTier = "MODERATE"
-            confidencePct = (64 + (consensusRatio - 0.60) * 45).roundToInt().coerceIn(64, 76)
+            confidencePct = (64 + (consensusRatio - 0.58) * 45).roundToInt().coerceIn(64, 76)
             finalReason = primaryReason
         } else {
             safetyTier = "CAUTION / SKIP"
             confidencePct = 54
-            finalReason = "Diverging Models ($modelConsensus) • High Volatility / Chop"
+            finalReason = if (isEquilibrium) primaryReason else "Diverging Models ($modelConsensus) • High Volatility / Chop"
+        }
+
+        // Determine Action Type (Flip vs Repeat vs Chop vs Mean Reversion)
+        val isContinuation = recommendedSize == latest.size
+        val actionType = if (isContinuation) {
+            if (activeStreakLen >= 3) "DRAGON_CONTINUATION" else "TREND_REPEAT"
+        } else {
+            when {
+                primaryPattern.contains("CHOP", ignoreCase = true) -> "CHOP_ALTERNATION"
+                primaryPattern.contains("REVERSION", ignoreCase = true) ||
+                        primaryPattern.contains("SATURATION", ignoreCase = true) ||
+                        primaryPattern.contains("DIGIT", ignoreCase = true) ||
+                        primaryPattern.contains("MEAN", ignoreCase = true) -> "MEAN_REVERSION"
+                primaryPattern.contains("DRAGON_REVERSAL", ignoreCase = true) -> "DRAGON_REVERSAL"
+                primaryPattern.contains("DOUBLE", ignoreCase = true) -> "DOUBLE_PAIR_FLIP"
+                else -> "REVERSAL_FLIP"
+            }
         }
 
         // Color & Number Forecast
@@ -323,7 +418,10 @@ object WingoTrendAnalyzer {
             safetyTier = safetyTier,
             patternName = primaryPattern,
             recommendedNumbers = recommendedNumbers,
-            modelConsensus = modelConsensus
+            modelConsensus = modelConsensus,
+            targetPeriod = computedTargetPeriod,
+            lastResultSummary = lastResultSummary,
+            actionType = actionType
         )
     }
 
@@ -350,7 +448,8 @@ object WingoTrendAnalyzer {
             if (winRate >= 0.60) {
                 val target = if (k4Big > k4Small) "BIG" else "SMALL"
                 val pct = (winRate * 100).roundToInt()
-                return SubModelVote(target, 3.5, "PATTERN_4GRAM", "4-Round Sequence Match: ${pct}% historical repeat to $target ($k4Total occurrences)")
+                val weight = (winRate * 2.8 + (k4Total.coerceAtMost(4) * 0.25)).coerceIn(2.0, 3.6)
+                return SubModelVote(target, weight, "PATTERN_4GRAM", "4-Round Sequence Match: ${pct}% historical transition to $target ($k4Total occurrences)")
             }
         }
 
@@ -369,10 +468,11 @@ object WingoTrendAnalyzer {
         val k3Total = k3Big + k3Small
         if (k3Total >= 3) {
             val winRate = if (k3Big > k3Small) k3Big.toDouble() / k3Total else k3Small.toDouble() / k3Total
-            if (winRate >= 0.62) {
+            if (winRate >= 0.60) {
                 val target = if (k3Big > k3Small) "BIG" else "SMALL"
                 val pct = (winRate * 100).roundToInt()
-                return SubModelVote(target, 3.0, "PATTERN_3GRAM", "3-Round Pattern Match: ${pct}% historical continuation to $target ($k3Total occurrences)")
+                val weight = (winRate * 2.5 + (k3Total.coerceAtMost(4) * 0.2)).coerceIn(1.8, 3.2)
+                return SubModelVote(target, weight, "PATTERN_3GRAM", "3-Round Pattern Match: ${pct}% historical transition to $target ($k3Total occurrences)")
             }
         }
         return null
@@ -393,12 +493,12 @@ object WingoTrendAnalyzer {
 
             if (s0 == s1 && s2 == s3 && s0 != s2) {
                 val predicted = s0
-                return SubModelVote(predicted, 3.2, "DOUBLE_DOUBLE_2_2", "2-2 Double Pair Rhythm: Next cycle expected to start with $predicted")
+                return SubModelVote(predicted, 3.3, "DOUBLE_DOUBLE_2_2", "2-2 Double Pair Rhythm: Cycle complete • Flip to $predicted")
             }
 
             if (s1 == s2 && s2 != s3 && (n < 5 || chrono[n - 5].size != s1)) {
                 val predicted = s3
-                return SubModelVote(predicted, 3.0, "DOUBLE_PAIR_COMPLETION", "2-2 Incomplete Pair: Second $predicted expected to complete pair")
+                return SubModelVote(predicted, 2.9, "DOUBLE_PAIR_COMPLETION", "2-2 Incomplete Pair: Second $predicted expected to complete pair")
             }
         }
 
@@ -413,20 +513,33 @@ object WingoTrendAnalyzer {
         }
         if (chopLen >= 3) {
             val predicted = if (latest == "BIG") "SMALL" else "BIG"
-            return SubModelVote(predicted, 3.1, "CHOP_1_1_RHYTHM", "1-1 Alternating Chop (${chopLen}x Cycle): Continuation flip to $predicted")
+            return SubModelVote(predicted, 3.4, "CHOP_1_1_RHYTHM", "1-1 Alternating Chop (${chopLen}x Cycle): Continuation flip to $predicted")
+        } else if (chopLen == 2) {
+            val predicted = if (latest == "BIG") "SMALL" else "BIG"
+            return SubModelVote(predicted, 2.4, "CHOP_1_1_RHYTHM", "Chop 1-1 Active: Lean towards alternating $predicted")
         }
 
-        // 3. Dragon Streak Management (3+ consecutive identical outcomes)
+        // 3. Dragon Streak Management (Continuous identical outcomes)
         var streakLen = 1
         for (i in n - 1 downTo 1) {
             if (chrono[i].size == chrono[i - 1].size) streakLen++ else break
         }
 
         if (streakLen in 3..4) {
-            return SubModelVote(latest, 2.6, "DRAGON_RIDER", "Dragon Momentum (${streakLen}x $latest): Trend Continuation")
-        } else if (streakLen >= 6) {
+            // Check recent 25 draws parity: if already heavily saturated (> 60%), fatigue reversal
+            val recent25 = chrono.takeLast(25)
+            val sameCount = recent25.count { it.size == latest }
+            val samePct = (sameCount.toDouble() / recent25.size) * 100.0
+            if (samePct >= 62.0) {
+                val opposite = if (latest == "BIG") "SMALL" else "BIG"
+                return SubModelVote(opposite, 2.7, "SATURATED_DRAGON_FADE", "Dragon Fatigue (${streakLen}x $latest, $samePct% saturated): Reversal to $opposite")
+            } else {
+                return SubModelVote(latest, 2.3, "DRAGON_RIDER", "Dragon Momentum (${streakLen}x $latest): Trend Continuation")
+            }
+        } else if (streakLen >= 5) {
             val opposite = if (latest == "BIG") "SMALL" else "BIG"
-            return SubModelVote(opposite, 4.0, "DRAGON_REVERSAL", "Extreme Dragon (${streakLen}x $latest): Binomial Fatigue Reversal to $opposite")
+            val weight = if (streakLen >= 7) 4.2 else 3.8
+            return SubModelVote(opposite, weight, "DRAGON_EXHAUSTION_REVERSAL", "Extreme Dragon (${streakLen}x $latest): Binomial Fatigue Reversal to $opposite")
         }
 
         return null
@@ -447,14 +560,14 @@ object WingoTrendAnalyzer {
             }
         }
         val total = afterNextBig + afterNextSmall
-        if (total >= 4) {
+        if (total >= 3) {
             val pBig = (afterNextBig.toDouble() / total) * 100.0
             val pSmall = (afterNextSmall.toDouble() / total) * 100.0
 
             if (pBig >= 58.0) {
-                return SubModelVote("BIG", 2.2, "MARKOV_ORDER_2", "2nd-Order Markov Chain: ${pBig.roundToInt()}% historical transition to Big")
+                return SubModelVote("BIG", 2.3, "MARKOV_ORDER_2", "2nd-Order Markov Chain: ${pBig.roundToInt()}% historical transition to Big")
             } else if (pSmall >= 58.0) {
-                return SubModelVote("SMALL", 2.2, "MARKOV_ORDER_2", "2nd-Order Markov Chain: ${pSmall.roundToInt()}% historical transition to Small")
+                return SubModelVote("SMALL", 2.3, "MARKOV_ORDER_2", "2nd-Order Markov Chain: ${pSmall.roundToInt()}% historical transition to Small")
             }
         }
         return null
@@ -462,7 +575,7 @@ object WingoTrendAnalyzer {
 
     private fun calculateParityReversion(chrono: List<WingoProtocolEngine.WingoDrawResult>): SubModelVote? {
         val window = chrono.takeLast(30)
-        if (window.size < 20) return null
+        if (window.size < 18) return null
 
         val bigs = window.count { it.size == "BIG" }
         val smalls = window.count { it.size == "SMALL" }
@@ -471,12 +584,30 @@ object WingoTrendAnalyzer {
         val bigPct = (bigs.toDouble() / total) * 100.0
         val smallPct = (smalls.toDouble() / total) * 100.0
 
-        if (bigPct >= 62.0) {
-            return SubModelVote("SMALL", 2.4, "MEAN_REVERSION", "Parity Saturation: Big over-indexed at ${bigPct.roundToInt()}% (Small due)")
-        } else if (smallPct >= 62.0) {
-            return SubModelVote("BIG", 2.4, "MEAN_REVERSION", "Parity Saturation: Small over-indexed at ${smallPct.roundToInt()}% (Big due)")
+        if (bigPct >= 60.0) {
+            val weight = (2.2 + (bigPct - 60.0) * 0.1).coerceIn(2.2, 3.8)
+            return SubModelVote("SMALL", weight, "MEAN_REVERSION", "Parity Saturation: Big over-indexed at ${bigPct.roundToInt()}% (Small due)")
+        } else if (smallPct >= 60.0) {
+            val weight = (2.2 + (smallPct - 60.0) * 0.1).coerceIn(2.2, 3.8)
+            return SubModelVote("BIG", weight, "MEAN_REVERSION", "Parity Saturation: Small over-indexed at ${smallPct.roundToInt()}% (Big due)")
         }
         return null
+    }
+
+    /**
+     * Sub-Model 5: Rolling Digit Moving Average Oscillator.
+     * Evaluates numerical cluster gravitation (theoretical expected value = 4.5).
+     */
+    private fun calculateDigitOscillator(chrono: List<WingoProtocolEngine.WingoDrawResult>): SubModelVote? {
+        if (chrono.size < 6) return null
+        val recent6 = chrono.takeLast(6)
+        val avg = recent6.map { it.number }.average()
+
+        return if (avg >= 6.1) {
+            SubModelVote("SMALL", 2.2, "DIGIT_OVERBOUGHT", "Digit Cluster Oscillator: High average (%.1f) • Pullback to Small".format(avg))
+        } else if (avg <= 2.9) {
+            SubModelVote("BIG", 2.2, "DIGIT_OVERSOLD", "Digit Cluster Oscillator: Low average (%.1f) • Rebound to Big".format(avg))
+        } else null
     }
 
     private fun forecastColor(chrono: List<WingoProtocolEngine.WingoDrawResult>, predictedSize: String): String {
