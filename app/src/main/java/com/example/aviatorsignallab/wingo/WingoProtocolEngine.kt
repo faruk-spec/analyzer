@@ -31,7 +31,7 @@ class WingoProtocolEngine(
     )
 
     interface WingoListener {
-        fun onNewDrawResult(result: WingoDrawResult)
+        fun onNewDrawResult(result: WingoDrawResult, history: List<WingoDrawResult>)
         fun onIssueUpdated(issue: WingoIssueInfo)
         fun onHistoryLoaded(results: List<WingoDrawResult>)
     }
@@ -43,21 +43,29 @@ class WingoProtocolEngine(
 
     /**
      * Determines whether a network packet belongs to WinGo / Lottery game endpoints.
+     * Reverse engineered from damansuperstar1.com bundle:
+     * - GetNoaverageEmerdList, GetGameIssue, GetWinTheLotteryResult, GetLongDragon
+     * - /Lottery/GetHistoryIssuePage, /Lottery/GetGameInfo
+     * - https://draw.ar-lottery06.com/WinGo/.../GetHistoryIssuePage.json
      */
     fun isWingoTraffic(url: String, payload: String?): Boolean {
-        val lowerUrl = url.toLowerCase()
-        val lowerPayload = (payload ?: "").toLowerCase()
+        val lowerUrl = url.lowercase()
+        val lowerPayload = (payload ?: "").lowercase()
 
         val isWingoUrl = lowerUrl.contains("wingo") ||
                 lowerUrl.contains("lottery") ||
-                lowerUrl.contains("win_history") ||
-                lowerUrl.contains("getissue") ||
-                lowerUrl.contains("win/getwin")
+                lowerUrl.contains("emerdlist") ||
+                lowerUrl.contains("gethistoryissuepage") ||
+                lowerUrl.contains("getlongdragon") ||
+                lowerUrl.contains("getgameissue") ||
+                lowerUrl.contains("getwinthelotteryresult") ||
+                lowerUrl.contains("win_history")
 
         val hasWingoFields = lowerPayload.contains("issuenumber") ||
                 lowerPayload.contains("periodid") ||
                 (lowerPayload.contains("\"number\":") && lowerPayload.contains("\"color\"")) ||
-                (lowerPayload.contains("\"big\"") && lowerPayload.contains("\"small\""))
+                lowerPayload.contains("gethistoryissuepage") ||
+                lowerPayload.contains("premium")
 
         return isWingoUrl || hasWingoFields
     }
@@ -150,10 +158,15 @@ class WingoProtocolEngine(
     }
 
     private fun extractSingleDraw(obj: JsonObject): WingoDrawResult? {
-        val numVal = obj.get("number")?.asInt
-            ?: obj.get("openNumber")?.asInt
-            ?: obj.get("winNumber")?.asInt
-            ?: return null
+        val numVal = try {
+            when {
+                obj.has("number") -> obj.get("number").asString.toIntOrNull()
+                obj.has("openNumber") -> obj.get("openNumber").asString.toIntOrNull()
+                obj.has("winNumber") -> obj.get("winNumber").asString.toIntOrNull()
+                obj.has("premium") -> obj.get("premium").asString.toIntOrNull()
+                else -> null
+            }
+        } catch (e: Exception) { null } ?: return null
 
         val period = obj.get("issueNumber")?.asString
             ?: obj.get("periodId")?.asString
@@ -161,13 +174,13 @@ class WingoProtocolEngine(
             ?: "p_${System.currentTimeMillis()}"
 
         val size = when {
-            obj.has("size") -> obj.get("size").asString.toUpperCase()
+            obj.has("size") -> obj.get("size").asString.uppercase()
             numVal >= 5 -> "BIG"
             else -> "SMALL"
         }
 
         val color = when {
-            obj.has("color") -> obj.get("color").asString.toUpperCase()
+            obj.has("color") -> obj.get("color").asString.uppercase()
             numVal == 0 -> "RED_VIOLET"
             numVal == 5 -> "GREEN_VIOLET"
             numVal in listOf(1, 3, 7, 9) -> "GREEN"
@@ -183,13 +196,14 @@ class WingoProtocolEngine(
     }
 
     private fun registerNewDraw(draw: WingoDrawResult) {
-        synchronized(pastResults) {
+        val snapshot = synchronized(pastResults) {
             if (pastResults.none { it.periodId == draw.periodId }) {
                 pastResults.add(0, draw)
                 if (pastResults.size > 200) pastResults.removeAt(pastResults.size - 1)
             }
+            pastResults.toList()
         }
-        listener?.onNewDrawResult(draw)
+        listener?.onNewDrawResult(draw, snapshot)
     }
 
     fun getRecentResults(): List<WingoDrawResult> {
