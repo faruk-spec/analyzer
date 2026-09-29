@@ -63,10 +63,11 @@ class ProtocolDiscoveryEngine(
             transitionToStart(extractedRoundId, timestamp)
         }
 
-        if (extractedMultiplier != null && extractedMultiplier >= 1.0) {
+        if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
+            val finalMult = extractedMultiplier ?: currentMultiplier
+            transitionToCrash(timestamp, finalMult)
+        } else if (extractedMultiplier != null && extractedMultiplier >= 1.0) {
             handleMultiplierUpdate(extractedMultiplier, extractedRoundId, timestamp)
-        } else if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
-            transitionToCrash(timestamp, currentMultiplier)
         } else if (extractedRoundId != null && extractedRoundId != currentRoundId && currentState != GameState.LIVE && currentState != GameState.UNKNOWN) {
             transitionToStart(extractedRoundId, timestamp)
         }
@@ -111,13 +112,10 @@ class ProtocolDiscoveryEngine(
     private fun handleMultiplierUpdate(newMultiplier: Double, roundIdCandidate: String?, timestamp: Long) {
         when (currentState) {
             GameState.UNKNOWN -> {
-                // Do not create false synthetic rounds on casino lobby.
-                // Only start if an authentic round ID is present.
-                if (roundIdCandidate != null && !roundIdCandidate.startsWith("rnd_")) {
-                    transitionToStart(roundIdCandidate, timestamp)
-                    currentMultiplier = newMultiplier
-                    transitionToLive()
-                }
+                val rid = roundIdCandidate ?: "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                transitionToStart(rid, timestamp)
+                currentMultiplier = newMultiplier
+                transitionToLive()
             }
             GameState.ROUND_START -> {
                 currentMultiplier = newMultiplier
