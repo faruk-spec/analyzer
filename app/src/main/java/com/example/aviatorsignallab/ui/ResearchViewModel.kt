@@ -297,7 +297,14 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {
         _currentMultiplier.postValue(finalMultiplier)
-        _preCrashAlert.postValue(null)
+        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, finalMultiplier, "CRITICAL", "FLEW_AWAY_EXACT"))
+
+        viewModelScope.launch {
+            delay(3500L)
+            if (protocolEngine.currentState != GameState.LIVE) {
+                _preCrashAlert.postValue(null)
+            }
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             val round = protocolEngine.completeRound() ?: return@launch

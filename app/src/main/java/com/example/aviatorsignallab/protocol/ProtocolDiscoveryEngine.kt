@@ -64,15 +64,14 @@ class ProtocolDiscoveryEngine(
 
     @Synchronized
     fun checkInFlightGap(currentTime: Long) {
+        // Only trigger on severe, sustained stream freeze (>1200ms) to avoid false alarms from mobile network jitter
         if (currentState == GameState.LIVE && lastLiveTickTimestamp > 0) {
             val gap = currentTime - lastLiveTickTimestamp
-            // A true halt in the Spribe Aviator multiplier tick stream is >= 350ms (3 to 4 missed ticks).
-            // Thresholds under 300ms trigger false alarms from standard mobile internet packet jitter.
-            if (gap in 350..3000) {
-                if (!isPreCrashAlertFiredForRound && currentMultiplier >= 1.20) {
+            if (gap in 1200..5000) {
+                if (!isPreCrashAlertFiredForRound && currentMultiplier >= 1.30) {
                     isPreCrashAlertFiredForRound = true
                     alertFiredMultiplier = currentMultiplier
-                    listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "STREAM_HALT_${gap}ms")
+                    listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "STREAM_FREEZE_${gap}ms")
                 }
             }
         }
@@ -288,6 +287,7 @@ class ProtocolDiscoveryEngine(
             }
         }
 
+        listener?.onPreCrashAlert(currentRoundId, finalMultiplier, "CRITICAL", "FLEW_AWAY_EXACT")
         listener?.onRoundCrashDetected(currentRoundId, finalMultiplier, timestamp)
         listener?.onStateChanged(prev, currentState, currentRoundId, currentMultiplier)
     }

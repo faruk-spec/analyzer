@@ -134,8 +134,8 @@ class ProtocolDiscoveryEngineTest {
 
         assertEquals(false, alertTriggered)
 
-        // 3. Gap check 400ms later without receiving ticks -> pre-crash alert!
-        engine.checkInFlightGap(t0 + 2400L)
+        // 3. Exact crash packet arrives -> immediate crash signal!
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":3,"mul":"1.45"}""", t0 + 2500L)
 
         assertEquals(true, alertTriggered)
         assertEquals(1.45, alertMult, 0.001)

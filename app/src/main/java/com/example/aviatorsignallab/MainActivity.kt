@@ -270,8 +270,16 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         viewModel.preCrashAlert.observe(this) { alert ->
             if (alert != null && alert.active) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
-                binding.tvAlertTitle.text = "SIGNAL: FLEW AWAY IMMINENT (%.2fx)".format(alert.multiplier)
-                binding.tvAlertSubtitle.text = "Anomaly: ${alert.reason} | Confidence: ${alert.confidence}"
+                val isExactCrash = alert.reason.contains("FLEW_AWAY") || alert.reason.contains("CRASH")
+                if (isExactCrash) {
+                    binding.tvAlertTitle.text = "FLEW AWAY @ %.2fx".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "Exact Crash Instant • Round Concluded"
+                    binding.tvBubbleStatus.text = "CRASH!"
+                } else {
+                    binding.tvAlertTitle.text = "SIGNAL: FLEW AWAY IMMINENT (%.2fx)".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "Anomaly: ${alert.reason} | Confidence: ${alert.confidence}"
+                    binding.tvBubbleStatus.text = "SIGNAL!"
+                }
 
                 // Instant Haptic Vibration
                 triggerImmediateVibration()
@@ -279,7 +287,6 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 // Highlight multiplier in intense crash rose
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-                binding.tvBubbleStatus.text = "SIGNAL!"
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
             } else {
                 binding.bannerPreCrashAlert.visibility = View.GONE
@@ -293,17 +300,19 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
     private fun triggerImmediateVibration() {
         try {
+            val timings = longArrayOf(0L, 180L, 80L, 180L)
+            val amplitudes = intArrayOf(0, 255, 0, 255)
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 val vibratorManager = getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(android.os.VibrationEffect.createOneShot(200L, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                vibratorManager?.defaultVibrator?.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
             } else {
                 @Suppress("DEPRECATION")
                 val vibrator = getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(android.os.VibrationEffect.createOneShot(200L, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                    vibrator?.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
                 } else {
                     @Suppress("DEPRECATION")
-                    vibrator?.vibrate(200L)
+                    vibrator?.vibrate(timings, -1)
                 }
             }
         } catch (e: Exception) {}
