@@ -270,7 +270,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         viewModel.preCrashAlert.observe(this) { alert ->
             if (alert != null && alert.active) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
-                binding.tvAlertTitle.text = "⚠️ SIGNAL: FLEW AWAY IMMINENT (%.2fx)".format(alert.multiplier)
+                binding.tvAlertTitle.text = "SIGNAL: FLEW AWAY IMMINENT (%.2fx)".format(alert.multiplier)
                 binding.tvAlertSubtitle.text = "Anomaly: ${alert.reason} | Confidence: ${alert.confidence}"
 
                 // Instant Haptic Vibration

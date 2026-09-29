@@ -370,7 +370,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:fontFamily="sans-serif-black"
-                        android:text="⚠️ PRE-CRASH SIGNAL DETECTED"
+                        android:text="PRE-CRASH SIGNAL DETECTED"
                         android:textColor="#FFFFFF"
                         android:textSize="12sp"
                         android:textStyle="bold" />
@@ -379,7 +379,7 @@
                         android:id="@+id/tvAlertSubtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Tick stream anomaly detected — High flew away risk"
+                        android:text="Tick stream anomaly detected - High flew away risk"
                         android:textColor="#FEE2E2"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -413,12 +413,13 @@
                 android:orientation="horizontal"
                 android:visibility="gone">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
                     android:layout_marginEnd="6dp"
-                    android:text="⚡"
-                    android:textSize="12sp" />
+                    android:contentDescription="Active"
+                    android:src="@drawable/ic_activity"
+                    app:tint="@color/accent_blue" />
 
                 <TextView
                     android:id="@+id/tvBubbleMultiplier"

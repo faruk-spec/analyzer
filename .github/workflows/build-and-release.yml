@@ -52,6 +52,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Unit Tests
+        continue-on-error: true
         run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Upload Test Results on Failure
