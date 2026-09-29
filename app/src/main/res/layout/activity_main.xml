@@ -6,25 +6,28 @@
     android:id="@+id/rootCoordinator"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     android:background="@color/bg_primary">
 
     <!-- Main Content: Top Bar + Metrics Strip + WebView -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:fitsSystemWindows="true"
         android:orientation="vertical">
 
-        <!-- Top App Bar -->
+        <!-- Top App Bar with safe insets -->
         <LinearLayout
+            android:id="@+id/topAppBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@color/bg_secondary"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="12dp"
-            android:paddingTop="10dp"
+            android:paddingTop="14dp"
             android:paddingEnd="12dp"
-            android:paddingBottom="10dp">
+            android:paddingBottom="12dp">
 
             <ImageView
                 android:layout_width="26dp"
@@ -45,7 +48,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/app_name"
                     android:textColor="@color/text_primary"
-                    android:textSize="16sp"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -62,12 +65,22 @@
                 android:id="@+id/tvConnectionStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
+                android:layout_marginEnd="6dp"
                 android:background="@drawable/bg_status_badge"
                 android:text="@string/status_disconnected"
                 android:textColor="@color/text_muted"
                 android:textSize="10sp"
                 android:textStyle="bold" />
+
+            <!-- Webhook Stream Sync Button -->
+            <ImageButton
+                android:id="@+id/btnWebhookSync"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Webhook Sync"
+                android:src="@drawable/ic_cloud_upload"
+                app:tint="@color/accent_cyan" />
 
             <!-- Diagnostics Action Button -->
             <ImageButton

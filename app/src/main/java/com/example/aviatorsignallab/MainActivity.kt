@@ -46,6 +46,18 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Handle safe system window insets so top controls are never hidden under camera notch or status bar
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val statusBarHeight = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
+            binding.topAppBar.setPadding(
+                binding.topAppBar.paddingLeft,
+                statusBarHeight + 12,
+                binding.topAppBar.paddingRight,
+                binding.topAppBar.paddingBottom
+            )
+            insets
+        }
+
         updateManager = UpdateManager(this)
 
         setupBottomSheet()
@@ -194,6 +206,14 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             }
         }
 
+        binding.btnWebhookSync.setOnClickListener {
+            showWebhookConfigDialog()
+        }
+
+        sheet.btnSheetWebhookConfig.setOnClickListener {
+            showWebhookConfigDialog()
+        }
+
         sheet.btnExportRoundsCsv.setOnClickListener {
             exportCsvAndShare("ROUNDS")
         }
@@ -330,6 +350,34 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                     tvStatus.text = "Download failed: ${err.message}"
                 }
             }
+        }
+
+        dialog.show()
+    }
+
+    private fun showWebhookConfigDialog() {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_webhook_config)
+
+        val switchSync = dialog.findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchEnableWebhook)
+        val etUrl = dialog.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etWebhookUrl)
+        val btnSave = dialog.findViewById<Button>(R.id.btnSaveWebhook)
+        val btnCancel = dialog.findViewById<Button>(R.id.btnCancelWebhook)
+
+        switchSync.isChecked = viewModel.webhookSyncManager.isSyncEnabled
+        etUrl.setText(viewModel.webhookSyncManager.webhookUrl)
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        btnSave.setOnClickListener {
+            val url = etUrl.text?.toString()?.trim() ?: ""
+            viewModel.webhookSyncManager.webhookUrl = url
+            viewModel.webhookSyncManager.isSyncEnabled = switchSync.isChecked
+
+            val msg = if (switchSync.isChecked) "Auto Webhook Stream enabled" else "Webhook Stream disabled"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
         }
 
         dialog.show()

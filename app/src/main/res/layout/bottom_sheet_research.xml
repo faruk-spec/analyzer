@@ -276,6 +276,18 @@
                 app:icon="@drawable/ic_download"
                 app:iconTint="@color/bg_primary" />
 
+            <!-- Configure Webhook Stream Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSheetWebhookConfig"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="📡 Setup Free Webhook Stream"
+                android:textColor="@color/text_primary"
+                app:backgroundTint="@color/bg_secondary"
+                app:strokeColor="@color/accent_cyan"
+                app:strokeWidth="1dp" />
+
             <!-- Clear Database Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnClearData"

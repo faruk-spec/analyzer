@@ -31,6 +31,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     val zipExportManager = ZipExportManager(application)
 
     val protocolEngine = ProtocolDiscoveryEngine(this)
+    val webhookSyncManager = com.example.aviatorsignallab.sync.WebhookSyncManager(application)
 
     // UI LiveData states
     private val _connectionStatus = MutableLiveData("DISCONNECTED")
@@ -187,6 +188,15 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             }
             _researchSummary.postValue(summary)
             _totalRounds.postValue(totalRCount)
+
+            // Trigger Automatic Webhook Telemetry Sync if enabled
+            if (webhookSyncManager.isSyncEnabled) {
+                webhookSyncManager.sendRoundTelemetry(round, allRoundEvents).onSuccess {
+                    onDiagnosticsReceived("Webhook sync: Sent round ${round.roundId} successfully")
+                }.onFailure { err ->
+                    onDiagnosticsReceived("Webhook sync failed: ${err.message}")
+                }
+            }
         }
     }
 
