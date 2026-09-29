@@ -302,7 +302,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                     vibrator?.vibrate(200)
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
     }
 
     private fun setupListeners() {
