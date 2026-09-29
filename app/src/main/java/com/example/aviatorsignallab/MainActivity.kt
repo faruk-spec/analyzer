@@ -283,8 +283,8 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
             } else {
                 binding.bannerPreCrashAlert.visibility = View.GONE
-                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.brand_sapphire))
-                binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.brand_sapphire))
+                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
+                binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
                 binding.tvBubbleStatus.text = "LIVE"
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
             }
