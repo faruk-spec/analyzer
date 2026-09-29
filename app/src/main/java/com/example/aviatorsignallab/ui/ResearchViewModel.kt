@@ -154,6 +154,26 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         if (state.history.isNotEmpty()) {
             _latestWingoDraw.postValue(state.history.first())
         }
+
+        // Trigger immediate eager fetch for the newly selected room with anti-cache headers
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val timestamp = System.currentTimeMillis()
+                val url = "https://draw.ar-lottery06.com/WinGo/${room.roomCode}/GetHistoryIssuePage.json?_t=$timestamp"
+                val req = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                    .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                    .header("Pragma", "no-cache")
+                    .header("Expires", "0")
+                    .build()
+                val resp = httpClient.newCall(req).execute()
+                val body = resp.body?.string()
+                if (!body.isNullOrEmpty()) {
+                    wingoEngine.processPayload("CDN", url, body)
+                }
+            } catch (e: Exception) {}
+        }
     }
 
     private val _latestWingoDraw = MutableLiveData<WingoProtocolEngine.WingoDrawResult?>()
@@ -308,10 +328,14 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
                     for (room in rooms) {
                         try {
-                            val url = "https://draw.ar-lottery06.com/WinGo/${room.roomCode}/GetHistoryIssuePage.json"
+                            val timestamp = System.currentTimeMillis()
+                            val url = "https://draw.ar-lottery06.com/WinGo/${room.roomCode}/GetHistoryIssuePage.json?_t=$timestamp"
                             val req = okhttp3.Request.Builder()
                                 .url(url)
                                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                                .header("Pragma", "no-cache")
+                                .header("Expires", "0")
                                 .build()
                             val resp = httpClient.newCall(req).execute()
                             val body = resp.body?.string()
@@ -325,7 +349,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
                 } catch (e: Exception) {
                     // Safe guard
                 }
-                delay(3000L)
+                delay(2500L)
             }
         }
     }

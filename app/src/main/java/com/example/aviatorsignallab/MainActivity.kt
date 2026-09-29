@@ -460,17 +460,8 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             if (trend.currentStreakLength >= 3) {
                 binding.tvWingoStreakBadge.visibility = View.VISIBLE
                 binding.tvWingoStreakBadge.text = "🐉 ${trend.currentStreakLength}x ${trend.currentStreakType}"
-
-                if (trend.isDragonActive) {
-                    binding.bannerWingoAlert.visibility = View.VISIBLE
-                    binding.tvWingoAlertTitle.text = "🐉 DRAGON DETECTED: ${trend.currentStreakLength}x ${trend.currentStreakType}"
-                    binding.tvWingoAlertSubtitle.text = "Extreme parity run on ${viewModel.activeWingoRoom.value?.displayName ?: "WinGo"} • Reversal Expected"
-                } else {
-                    binding.bannerWingoAlert.visibility = View.GONE
-                }
             } else {
                 binding.tvWingoStreakBadge.visibility = View.GONE
-                binding.bannerWingoAlert.visibility = View.GONE
             }
 
             val bigPct = kotlin.math.round(trend.bigRatioPct).toInt()
@@ -532,15 +523,12 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             }
 
             // Top HUD Bar Prediction Badge: show prefix based on safety tier & action tag
-            val prefix = when (pred.safetyTier) {
-                "HIGH CONFIDENCE" -> "⚡ BET:"
-                "MODERATE" -> "🎯 BET:"
-                else -> "⚠️ SKIP:"
-            }
-            binding.tvWingoTopPrediction.text = "$prefix ${pred.recommendedSize} [$actionTag ${pred.confidencePct}%]"
-            if (pred.safetyTier == "CAUTION / SKIP") {
+            if (pred.safetyTier == "CAUTION / SKIP" || pred.kellyUnitSize.contains("0 UNITS")) {
+                binding.tvWingoTopPrediction.text = "⚠️ SKIP ROUND [0 UNITS • HIGH NOISE]"
                 binding.tvWingoTopPrediction.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
             } else {
+                val prefix = if (pred.safetyTier == "HIGH CONFIDENCE") "⚡ BET:" else "🎯 BET:"
+                binding.tvWingoTopPrediction.text = "$prefix ${pred.recommendedSize} [$actionTag ${pred.confidencePct}% • ${pred.kellyUnitSize}]"
                 binding.tvWingoTopPrediction.setTextColor(sizeColor)
             }
 
@@ -560,7 +548,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             sheet.tvSheetPredConfidence.text = "${pred.confidencePct}%"
             sheet.progressSheetPredConfidence.progress = pred.confidencePct
 
-            sheet.tvSheetPredSafety.text = pred.safetyTier
+            sheet.tvSheetPredSafety.text = "${pred.safetyTier} • ${pred.kellyUnitSize}"
             val safetyColor = when (pred.safetyTier) {
                 "HIGH CONFIDENCE" -> ContextCompat.getColor(this, R.color.accent_emerald)
                 "MODERATE" -> ContextCompat.getColor(this, R.color.accent_cyan)
@@ -568,13 +556,59 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             }
             sheet.tvSheetPredSafety.setTextColor(safetyColor)
 
-            sheet.tvSheetPredReason.text = pred.reasoning
+            sheet.tvSheetPredReason.text = "${pred.reasoning} • Sizing: ${pred.kellyUnitSize} (Entropy: ${"%.2f".format(pred.shannonEntropy)})"
             sheet.tvSheetPredPattern.text = "Pattern: ${pred.patternName.replace("_", " ")} • ${pred.modelConsensus}"
             if (pred.recommendedNumbers.isNotEmpty()) {
                 sheet.tvSheetPredNumbers.visibility = View.VISIBLE
                 sheet.tvSheetPredNumbers.text = "Numbers: ${pred.recommendedNumbers.joinToString(", ")}"
             } else {
                 sheet.tvSheetPredNumbers.visibility = View.GONE
+            }
+
+            // Dynamic Tactical HUD Banner (High Conviction / Dragon Fade / Entropy Skip)
+            val activeRoomName = viewModel.activeWingoRoom.value?.displayName ?: "WinGo"
+            when (pred.bannerStatus) {
+                "DRAGON_FADE_ALERT" -> {
+                    binding.bannerWingoAlert.visibility = View.VISIBLE
+                    binding.bannerWingoAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
+                    binding.ivWingoAlertIcon.setImageResource(R.drawable.ic_warning)
+                    binding.ivWingoAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.wingo_dragon))
+                    binding.tvWingoAlertTitle.text = "🚨 DRAGON EXHAUSTION DETECTED"
+                    binding.tvWingoAlertSubtitle.text = "${pred.reasoning} • Action: FADE to ${pred.recommendedSize} (${pred.confidencePct}%)"
+                    binding.tvWingoAlertAction.text = "FADE BET"
+                }
+                "HIGH_CONVICTION_SNIPE" -> {
+                    binding.bannerWingoAlert.visibility = View.VISIBLE
+                    binding.bannerWingoAlert.setBackgroundResource(R.drawable.bg_prepare_alert)
+                    binding.ivWingoAlertIcon.setImageResource(R.drawable.ic_verified)
+                    binding.ivWingoAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_emerald))
+                    binding.tvWingoAlertTitle.text = "🎯 HIGH CONVICTION SNIPE (${pred.confidencePct}%)"
+                    binding.tvWingoAlertSubtitle.text = "BET: ${pred.recommendedSize} • Sizing: ${pred.kellyUnitSize} • ${pred.reasoning}"
+                    binding.tvWingoAlertAction.text = "SNIPE"
+                }
+                "HIGH_ENTROPY_SKIP" -> {
+                    binding.bannerWingoAlert.visibility = View.VISIBLE
+                    binding.bannerWingoAlert.setBackgroundResource(R.drawable.bg_status_badge)
+                    binding.ivWingoAlertIcon.setImageResource(R.drawable.ic_warning)
+                    binding.ivWingoAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_amber))
+                    binding.tvWingoAlertTitle.text = "🛑 HIGH ENTROPY: SKIP ROUND"
+                    binding.tvWingoAlertSubtitle.text = "Random noise regime (Entropy ${"%.2f".format(pred.shannonEntropy)}) • Skipping to protect bankroll"
+                    binding.tvWingoAlertAction.text = "SKIP"
+                }
+                else -> {
+                    val trend = viewModel.wingoTrendSummary.value
+                    if (trend != null && trend.isDragonActive) {
+                        binding.bannerWingoAlert.visibility = View.VISIBLE
+                        binding.bannerWingoAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
+                        binding.ivWingoAlertIcon.setImageResource(R.drawable.ic_warning)
+                        binding.ivWingoAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.wingo_dragon))
+                        binding.tvWingoAlertTitle.text = "🐉 DRAGON DETECTED: ${trend.currentStreakLength}x ${trend.currentStreakType}"
+                        binding.tvWingoAlertSubtitle.text = "Extreme parity run on $activeRoomName • Reversal Expected"
+                        binding.tvWingoAlertAction.text = "RADAR"
+                    } else {
+                        binding.bannerWingoAlert.visibility = View.GONE
+                    }
+                }
             }
         }
 

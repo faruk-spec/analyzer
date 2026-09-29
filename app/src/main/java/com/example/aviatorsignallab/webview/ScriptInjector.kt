@@ -389,17 +389,6 @@ object ScriptInjector {
                             timeStr = (mins < 10 ? "0" + mins : "" + mins) + ":" + (secs < 10 ? "0" + secs : "" + secs);
                         }
 
-                        // 4. Extract recent winning balls near the header ticket
-                        var balls = [];
-                        var ballEls = document.querySelectorAll('[class*="ball"], [class*="num"], [class*="item"]');
-                        for (var b = 0; b < ballEls.length; b++) {
-                            var bText = ballEls[b].innerText ? ballEls[b].innerText.trim() : "";
-                            if (/^[0-9]$/.test(bText)) {
-                                balls.push(bText);
-                                if (balls.length >= 5) break;
-                            }
-                        }
-
                         if (currentPeriod && (currentPeriod !== lastPeriod || timeStr !== lastTime || activeRoom !== lastRoom)) {
                             lastPeriod = currentPeriod;
                             lastTime = timeStr;
@@ -411,8 +400,7 @@ object ScriptInjector {
                                 periodId: currentPeriod,
                                 timeText: timeStr,
                                 remainingSeconds: remainingSecs,
-                                isLocked: remainingSecs <= 5,
-                                balls: balls
+                                isLocked: remainingSecs <= 5
                             }), 50);
                         }
                     } catch(e) {}

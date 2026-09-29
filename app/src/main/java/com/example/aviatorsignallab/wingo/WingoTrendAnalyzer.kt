@@ -154,7 +154,10 @@ object WingoTrendAnalyzer {
         val modelConsensus: String = "",
         val targetPeriod: String = "--",
         val lastResultSummary: String = "--",
-        val actionType: String = "NEUTRAL"       // "REVERSAL_FLIP", "TREND_CONTINUATION", "CHOP_ALTERNATION", "MEAN_REVERSION", etc.
+        val actionType: String = "NEUTRAL",       // "REVERSAL_FLIP", "TREND_CONTINUATION", "CHOP_ALTERNATION", "MEAN_REVERSION", etc.
+        val shannonEntropy: Double = 1.0,        // Measure of disorder (0.0 = pure trend, 1.0 = pure noise)
+        val kellyUnitSize: String = "1 UNIT",     // "0 UNITS (SKIP)", "1 UNIT (STANDARD)", "2 UNITS (SNIPE)"
+        val bannerStatus: String = "NORMAL"      // "HIGH_CONVICTION_SNIPE", "DRAGON_FADE_ALERT", "HIGH_ENTROPY_SKIP"
     )
 
     private data class SubModelVote(
@@ -370,24 +373,9 @@ object WingoTrendAnalyzer {
         val totalActiveModels = votes.count { it.targetSize == "BIG" || it.targetSize == "SMALL" }
         val modelConsensus = if (isEquilibrium) "Balanced Split (Equilibrium)" else "$dominantVotes/$totalActiveModels Models Agree"
 
-        // Calibrate Safety Tier and Confidence
-        val safetyTier: String
-        val confidencePct: Int
-        val finalReason: String
-
-        if (!isEquilibrium && consensusRatio >= 0.72 && dominantVotes >= 2) {
-            safetyTier = "HIGH CONFIDENCE"
-            confidencePct = (78 + (consensusRatio - 0.72) * 50).roundToInt().coerceIn(78, 92)
-            finalReason = primaryReason
-        } else if (!isEquilibrium && consensusRatio >= 0.58) {
-            safetyTier = "MODERATE"
-            confidencePct = (64 + (consensusRatio - 0.58) * 45).roundToInt().coerceIn(64, 76)
-            finalReason = primaryReason
-        } else {
-            safetyTier = "CAUTION / SKIP"
-            confidencePct = 54
-            finalReason = if (isEquilibrium) primaryReason else "Diverging Models ($modelConsensus) • High Volatility / Chop"
-        }
+        // Shannon Entropy over rolling 15 draws
+        val entropy = calculateShannonEntropy(chrono, 15)
+        val isHighEntropyNoise = entropy >= 0.96 && activeStreakLen < 3 && totalActiveModels < 3
 
         // Determine Action Type (Flip vs Repeat vs Chop vs Mean Reversion)
         val isContinuation = recommendedSize == latest.size
@@ -400,10 +388,50 @@ object WingoTrendAnalyzer {
                         primaryPattern.contains("SATURATION", ignoreCase = true) ||
                         primaryPattern.contains("DIGIT", ignoreCase = true) ||
                         primaryPattern.contains("MEAN", ignoreCase = true) -> "MEAN_REVERSION"
-                primaryPattern.contains("DRAGON_REVERSAL", ignoreCase = true) -> "DRAGON_REVERSAL"
+                primaryPattern.contains("DRAGON_REVERSAL", ignoreCase = true) ||
+                        primaryPattern.contains("DRAGON_EXHAUSTION", ignoreCase = true) -> "DRAGON_REVERSAL"
                 primaryPattern.contains("DOUBLE", ignoreCase = true) -> "DOUBLE_PAIR_FLIP"
                 else -> "REVERSAL_FLIP"
             }
+        }
+
+        // Calibrate Safety Tier, Confidence, Kelly Sizing and Banner Status
+        val safetyTier: String
+        val confidencePct: Int
+        val finalReason: String
+        val kellyUnitSize: String
+        val bannerStatus: String
+
+        if (actionType == "DRAGON_REVERSAL") {
+            safetyTier = "HIGH CONFIDENCE"
+            confidencePct = if (activeStreakLen >= 6) 90 else 84
+            finalReason = primaryReason
+            kellyUnitSize = "2 UNITS (SNIPE)"
+            bannerStatus = "DRAGON_FADE_ALERT"
+        } else if (isHighEntropyNoise) {
+            safetyTier = "CAUTION / SKIP"
+            confidencePct = 52
+            finalReason = "High Shannon Entropy (H=%.2f) • Random coin-flip noise • Filter advises SKIP to protect bankroll".format(entropy)
+            kellyUnitSize = "0 UNITS (SKIP)"
+            bannerStatus = "HIGH_ENTROPY_SKIP"
+        } else if (!isEquilibrium && consensusRatio >= 0.72 && dominantVotes >= 2) {
+            safetyTier = "HIGH CONFIDENCE"
+            confidencePct = (78 + (consensusRatio - 0.72) * 50).roundToInt().coerceIn(78, 92)
+            finalReason = primaryReason
+            kellyUnitSize = "2 UNITS (SNIPE)"
+            bannerStatus = "HIGH_CONVICTION_SNIPE"
+        } else if (!isEquilibrium && consensusRatio >= 0.58) {
+            safetyTier = "MODERATE"
+            confidencePct = (64 + (consensusRatio - 0.58) * 45).roundToInt().coerceIn(64, 76)
+            finalReason = primaryReason
+            kellyUnitSize = "1 UNIT (STANDARD)"
+            bannerStatus = "NORMAL"
+        } else {
+            safetyTier = "CAUTION / SKIP"
+            confidencePct = 54
+            finalReason = if (isEquilibrium) primaryReason else "Diverging Models ($modelConsensus) • High Volatility / Chop"
+            kellyUnitSize = "0 UNITS (SKIP)"
+            bannerStatus = "HIGH_ENTROPY_SKIP"
         }
 
         // Color & Number Forecast
@@ -421,8 +449,27 @@ object WingoTrendAnalyzer {
             modelConsensus = modelConsensus,
             targetPeriod = computedTargetPeriod,
             lastResultSummary = lastResultSummary,
-            actionType = actionType
+            actionType = actionType,
+            shannonEntropy = entropy,
+            kellyUnitSize = kellyUnitSize,
+            bannerStatus = bannerStatus
         )
+    }
+
+    /**
+     * Calculates Shannon Entropy H(X) over a rolling window.
+     * H = 1.0 indicates maximum disorder (pure 50/50 noise).
+     * H < 0.85 indicates strong structural bias / exploitable order.
+     */
+    fun calculateShannonEntropy(chrono: List<WingoProtocolEngine.WingoDrawResult>, windowSize: Int = 15): Double {
+        if (chrono.size < 6) return 1.0
+        val window = chrono.takeLast(windowSize)
+        val total = window.size.toDouble()
+        val pBig = window.count { it.size == "BIG" } / total
+        val pSmall = 1.0 - pBig
+        if (pBig <= 0.0 || pSmall <= 0.0) return 0.0
+        val log2 = { x: Double -> kotlin.math.ln(x) / kotlin.math.ln(2.0) }
+        return -(pBig * log2(pBig) + pSmall * log2(pSmall))
     }
 
     private fun scanHistoricalKgrams(chrono: List<WingoProtocolEngine.WingoDrawResult>): SubModelVote? {

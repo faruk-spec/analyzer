@@ -171,36 +171,22 @@ class WingoProtocolEngine(
             val isLocked = obj.get("isLocked")?.asBoolean ?: (seconds <= 5)
 
             updateRoomIssue(room, period, seconds, isLocked)
-
-            // Extract balls if present
-            if (obj.has("balls") && obj.get("balls").isJsonArray) {
-                val balls = obj.getAsJsonArray("balls")
-                val results = mutableListOf<WingoDrawResult>()
-                for (b in balls) {
-                    val num = b.asString.toIntOrNull() ?: continue
-                    results.add(WingoDrawResult(
-                        periodId = "--",
-                        number = num,
-                        size = if (num >= 5) "BIG" else "SMALL",
-                        color = when {
-                            num == 0 -> "RED_VIOLET"
-                            num == 5 -> "GREEN_VIOLET"
-                            num in listOf(1, 3, 7, 9) -> "GREEN"
-                            else -> "RED"
-                        }
-                    ))
-                }
-                if (results.isNotEmpty()) {
-                    updateRoomHistory(room, results)
-                }
-            }
             return
         }
 
-        // Detect target room from URL, gameCode, or period ID
+        // Detect target room from URL, gameCode, typeId, or period ID
         var detectedRoom = WingoRoom.fromString(url)
         if (obj.has("gameCode")) {
             detectedRoom = WingoRoom.fromString(obj.get("gameCode").asString)
+        }
+        if (obj.has("typeId")) {
+            val tid = try { obj.get("typeId").asInt } catch (e: Exception) { 0 }
+            when (tid) {
+                30 -> detectedRoom = WingoRoom.WINGO_30S
+                1 -> detectedRoom = WingoRoom.WINGO_1M
+                2 -> detectedRoom = WingoRoom.WINGO_3M
+                3 -> detectedRoom = WingoRoom.WINGO_5M
+            }
         }
 
         val periodCandidate = obj.get("issueNumber")?.asString
@@ -275,7 +261,12 @@ class WingoProtocolEngine(
         val period = obj.get("issueNumber")?.asString
             ?: obj.get("periodId")?.asString
             ?: obj.get("issue")?.asString
-            ?: "p_${System.currentTimeMillis()}"
+            ?: return null
+
+        // Strictly validate: period must be real numeric lottery round ID of length >= 8
+        if (period == "--" || period.length < 8 || !period.all { it.isDigit() }) {
+            return null
+        }
 
         val size = when {
             obj.has("size") -> obj.get("size").asString.uppercase()
@@ -319,14 +310,18 @@ class WingoProtocolEngine(
 
     fun updateRoomHistory(room: WingoRoom, draws: List<WingoDrawResult>) {
         val state = roomStates[room] ?: return
+        val validDraws = draws.filter { it.periodId != "--" && it.periodId.length >= 8 && it.periodId.all { c -> c.isDigit() } }
+        if (validDraws.isEmpty()) return
+
         synchronized(state.history) {
-            for (item in draws) {
-                if (state.history.none { it.periodId == item.periodId && it.periodId != "--" }) {
+            val existingIds = state.history.map { it.periodId }.toMutableSet()
+            for (item in validDraws) {
+                if (existingIds.add(item.periodId)) {
                     state.history.add(item)
                 }
             }
-            state.history.sortByDescending { it.periodId }
-            while (state.history.size > 200) {
+            state.history.sortByDescending { it.periodId.toLongOrNull() ?: 0L }
+            while (state.history.size > 500) {
                 state.history.removeAt(state.history.size - 1)
             }
         }
@@ -343,11 +338,13 @@ class WingoProtocolEngine(
     }
 
     private fun registerNewDraw(room: WingoRoom, draw: WingoDrawResult) {
+        if (draw.periodId == "--" || draw.periodId.length < 8 || !draw.periodId.all { it.isDigit() }) return
         val state = roomStates[room] ?: return
         val snapshot = synchronized(state.history) {
-            if (state.history.none { it.periodId == draw.periodId && it.periodId != "--" }) {
-                state.history.add(0, draw)
-                if (state.history.size > 200) state.history.removeAt(state.history.size - 1)
+            if (state.history.none { it.periodId == draw.periodId }) {
+                state.history.add(draw)
+                state.history.sortByDescending { it.periodId.toLongOrNull() ?: 0L }
+                while (state.history.size > 500) state.history.removeAt(state.history.size - 1)
             }
             state.history.toList()
         }
