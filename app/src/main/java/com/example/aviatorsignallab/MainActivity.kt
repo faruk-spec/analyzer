@@ -76,13 +76,43 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
     private fun setupBottomSheet() {
         val sheetView = binding.bottomSheetResearch.root
         bottomSheetBehavior = BottomSheetBehavior.from(sheetView)
-        bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+        bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
 
-        binding.fabResearchPanel.setOnClickListener {
-            if (bottomSheetBehavior.state == BottomSheetBehavior.STATE_EXPANDED) {
-                bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
-            } else {
-                bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+        bottomSheetBehavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
+            override fun onStateChanged(bottomSheet: View, newState: Int) {
+                if (newState == BottomSheetBehavior.STATE_HIDDEN || newState == BottomSheetBehavior.STATE_COLLAPSED) {
+                    binding.bottomNav.menu.findItem(R.id.nav_game)?.isChecked = true
+                } else if (newState == BottomSheetBehavior.STATE_EXPANDED) {
+                    binding.bottomNav.menu.findItem(R.id.nav_signals)?.isChecked = true
+                }
+            }
+
+            override fun onSlide(bottomSheet: View, slideOffset: Float) {}
+        })
+
+        binding.bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_game -> {
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+                    true
+                }
+                R.id.nav_signals -> {
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+                    true
+                }
+                R.id.nav_traffic -> {
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+                    TrafficInspectorDialog(this, viewModel).show()
+                    true
+                }
+                R.id.nav_export -> {
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+                    binding.bottomSheetResearch.root.post {
+                        binding.bottomSheetResearch.btnExportAllZip.requestFocus()
+                    }
+                    true
+                }
+                else -> false
             }
         }
     }
@@ -346,7 +376,8 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (bottomSheetBehavior.state == BottomSheetBehavior.STATE_EXPANDED) {
-                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+                    binding.bottomNav.menu.findItem(R.id.nav_game)?.isChecked = true
                 } else if (binding.webView.canGoBack()) {
                     binding.webView.goBack()
                 } else {

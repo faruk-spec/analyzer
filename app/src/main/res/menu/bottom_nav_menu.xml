@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_game"
+        android:icon="@drawable/ic_gamepad"
+        android:title="Game" />
+
+    <item
+        android:id="@+id/nav_signals"
+        android:icon="@drawable/ic_activity"
+        android:title="Signals" />
+
+    <item
+        android:id="@+id/nav_traffic"
+        android:icon="@drawable/ic_terminal"
+        android:title="Traffic" />
+
+    <item
+        android:id="@+id/nav_export"
+        android:icon="@drawable/ic_download"
+        android:title="Export" />
+</menu>

@@ -323,7 +323,8 @@
         <FrameLayout
             android:id="@+id/webViewContainer"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
             <WebView
                 android:id="@+id/webView"
@@ -376,22 +377,19 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- Floating Action Button to Expand Research Sheet -->
-            <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-                android:id="@+id/fabResearchPanel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|end"
-                android:layout_margin="16dp"
-                android:text="Research Lab"
-                android:textColor="@color/text_primary"
-                android:backgroundTint="@color/bg_card"
-                app:icon="@drawable/ic_flight"
-                app:iconTint="@color/accent_cyan"
-                app:strokeColor="@color/accent_cyan"
-                app:strokeWidth="1dp" />
-
         </FrameLayout>
+
+        <!-- Production Fixed Bottom Navigation Bar -->
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottomNav"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:background="@color/bg_secondary"
+            app:itemIconTint="@color/nav_item_color"
+            app:itemTextColor="@color/nav_item_color"
+            app:itemRippleColor="@color/accent_blue_glow"
+            app:itemActiveIndicatorStyle="@null"
+            app:menu="@menu/bottom_nav_menu" />
 
     </LinearLayout>
 
