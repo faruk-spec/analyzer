@@ -176,6 +176,57 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Complete cache purge & re-sync (app-restart behavior).
+     * Clears all historical draw buffers, resets indicators, and re-queries live CDN feeds with fresh timestamps.
+     */
+    fun resetAndResyncAll() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // 1. Purge all in-memory room draw histories
+            for (state in wingoEngine.roomStates.values) {
+                synchronized(state.history) {
+                    state.history.clear()
+                }
+                state.trendSummary = WingoTrendAnalyzer.analyzeTrends(emptyList())
+                state.transitions = WingoTrendAnalyzer.calculateTransitions(emptyList())
+                state.prediction = WingoTrendAnalyzer.predictNextBet(emptyList())
+            }
+
+            val currentRoom = _activeWingoRoom.value ?: WingoProtocolEngine.WingoRoom.WINGO_30S
+            val activeState = wingoEngine.getActiveRoomState()
+            val issue = WingoProtocolEngine.WingoIssueInfo(activeState.currentPeriod, activeState.remainingSeconds, activeState.isLocked, currentRoom)
+            _wingoIssue.postValue(issue)
+            _wingoHistory.postValue(emptyList())
+            _wingoTrendSummary.postValue(activeState.trendSummary)
+            _wingoTransitions.postValue(activeState.transitions)
+            _wingoPrediction.postValue(activeState.prediction)
+            _latestWingoDraw.postValue(null)
+
+            // 2. Fetch fresh, un-cached draws for all 4 rooms
+            for (room in WingoProtocolEngine.WingoRoom.values()) {
+                try {
+                    val timestamp = System.currentTimeMillis()
+                    val url = "https://draw.ar-lottery06.com/WinGo/${room.roomCode}/GetHistoryIssuePage.json?_t=$timestamp"
+                    val req = okhttp3.Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                        .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                        .header("Pragma", "no-cache")
+                        .header("Expires", "0")
+                        .build()
+                    val resp = httpClient.newCall(req).execute()
+                    val body = resp.body?.string()
+                    if (!body.isNullOrEmpty()) {
+                        wingoEngine.processPayload("CDN", url, body)
+                    }
+                } catch (e: Exception) {}
+            }
+
+            // 3. Re-calculate empirical dataset stats
+            loadInitialStats()
+        }
+    }
+
     private val _latestWingoDraw = MutableLiveData<WingoProtocolEngine.WingoDrawResult?>()
     val latestWingoDraw: LiveData<WingoProtocolEngine.WingoDrawResult?> = _latestWingoDraw
 

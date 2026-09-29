@@ -692,6 +692,22 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             sheet.btnSheetTabWingo.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
         }
 
+        // Full Re-sync & Engine Restart Button (Purge Cache & Fetch Fresh Data)
+        sheet.btnSheetRefreshAll.setOnClickListener {
+            val rotate = android.view.animation.RotateAnimation(
+                0f, 360f,
+                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f,
+                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f
+            ).apply {
+                duration = 600
+                interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            }
+            sheet.btnSheetRefreshAll.startAnimation(rotate)
+
+            Toast.makeText(this, "🔄 Purging cache & restarting engine...", Toast.LENGTH_SHORT).show()
+            viewModel.resetAndResyncAll()
+        }
+
         // WinGo Room Selection Chips (Top HUD & Bottom Sheet)
         val roomChips = listOf(
             Pair(binding.chipWingo30s, WingoProtocolEngine.WingoRoom.WINGO_30S),

@@ -66,9 +66,20 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
+            android:layout_marginEnd="6dp"
             android:text="Live Sync"
             android:textColor="@color/accent_cyan"
             android:textSize="11sp" />
+
+        <ImageButton
+            android:id="@+id/btnSheetRefreshAll"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_pill_badge"
+            android:contentDescription="Full Re-sync and Restart Engine"
+            android:padding="6dp"
+            android:src="@drawable/ic_refresh"
+            app:tint="@color/accent_cyan" />
     </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
