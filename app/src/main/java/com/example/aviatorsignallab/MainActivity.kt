@@ -270,9 +270,15 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         viewModel.preCrashAlert.observe(this) { alert ->
             if (alert != null && alert.active) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
+                val isFreeze = alert.reason.startsWith("TICK_FREEZE")
                 val isExactCrash = alert.reason.contains("FLEW_AWAY") || alert.reason.contains("CRASH")
                 val isFastPath = alert.reason.contains("FAST_CRASH_SIGNAL")
-                if (isFastPath) {
+                if (isFreeze) {
+                    val gap = alert.reason.substringAfter("TICK_FREEZE_").substringBefore("ms")
+                    binding.tvAlertTitle.text = "⚡ PRE-CRASH FREEZE @ %.2fx".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "Cadence Silent (${gap}ms) • Cash Out Imminent"
+                    binding.tvBubbleStatus.text = "⚡EXIT!"
+                } else if (isFastPath) {
                     binding.tvAlertTitle.text = "⚡ SIGNAL @ %.2fx".format(alert.multiplier)
                     binding.tvAlertSubtitle.text = "Fast-Path Pre-Crash • ~15ms Ahead"
                     binding.tvBubbleStatus.text = "⚡SIGNAL!"

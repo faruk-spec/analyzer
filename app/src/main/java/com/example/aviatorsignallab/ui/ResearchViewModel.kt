@@ -6,7 +6,9 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.example.aviatorsignallab.AviatorLabApplication
+import com.example.aviatorsignallab.analysis.LiveTickCadenceAnalyzer
 import com.example.aviatorsignallab.analysis.FeatureExtractor
+import com.example.aviatorsignallab.analysis.TickFreezeResult
 import com.example.aviatorsignallab.analysis.ScientificAnalysisEngine
 import com.example.aviatorsignallab.export.ZipExportManager
 import com.example.aviatorsignallab.model.GameRound
@@ -43,6 +45,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     val protocolEngine = ProtocolDiscoveryEngine(this)
     val webhookSyncManager = com.example.aviatorsignallab.sync.WebhookSyncManager(application)
+    val liveTickAnalyzer = LiveTickCadenceAnalyzer()
 
     // UI LiveData states
     private val _connectionStatus = MutableLiveData("STANDBY")
@@ -75,6 +78,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private val _diagnosticsLog = MutableLiveData<List<String>>(emptyList())
     val diagnosticsLog: LiveData<List<String>> = _diagnosticsLog
 
+    // Real-time tick freeze status for live rounds
+    private val _tickFreezeStatus = MutableLiveData<String>("")
+    val tickFreezeStatus: LiveData<String> = _tickFreezeStatus
+
     // Traffic Inspector LiveData & buffer
     private val _trafficItems = MutableLiveData<List<TrafficItem>>(emptyList())
     val trafficItems: LiveData<List<TrafficItem>> = _trafficItems
@@ -86,6 +93,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private val recentEventCounter = AtomicInteger(0)
     private var tickerJob: Job? = null
     private var gapWatcherJob: Job? = null
+    private var riskMonitorJob: Job? = null
 
     // Fast-path crash dedup guard: prevents double-alerting when the normal pipeline
     // processes the same crash packet that the fast-path already handled.
@@ -103,6 +111,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         loadInitialStats()
         startTicker()
         startGapWatcher()
+        startRiskMonitor()
     }
 
     private fun loadInitialStats() {
@@ -147,6 +156,39 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * LIVE TICK FREEZE MONITOR: Fast 15ms polling loop that checks if the multiplier
+     * tick cadence has frozen during live flight. When the server prepares the crash packet,
+     * it stops sending cmd:85 ticks. This loop catches that silence 50-150ms BEFORE the
+     * crash packet arrives.
+     */
+    private fun startRiskMonitor() {
+        riskMonitorJob = viewModelScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                delay(15L)
+                if (protocolEngine.currentState == GameState.LIVE) {
+                    val currentMult = protocolEngine.currentMultiplier
+                    val result = liveTickAnalyzer.checkForFreeze(System.currentTimeMillis(), currentMult)
+                    _tickFreezeStatus.postValue(result.status)
+
+                    if (result.freezeDetected && !liveTickAnalyzer.hasAlertFired) {
+                        liveTickAnalyzer.markAlertFired()
+                        _preCrashAlert.postValue(PreCrashAlertState(
+                            active = true,
+                            roundId = protocolEngine.currentRoundId,
+                            multiplier = currentMult,
+                            confidence = "HIGH",
+                            reason = "TICK_FREEZE_${result.currentGapMs}ms"
+                        ))
+                        onDiagnosticsReceived("[LIVE_DETECT] ⚡ TICK FREEZE at ${"%.2f".format(currentMult)}x — gap ${result.currentGapMs}ms (avg ${result.avgIntervalMs}ms, ${"%.1f".format(result.freezeRatio)}x normal)")
+                    }
+                } else {
+                    _tickFreezeStatus.postValue("")
+                }
+            }
+        }
+    }
+
     override fun onRawEventReceived(transport: String, direction: String, payload: String?, size: Int) {
         if (isPaused) return
 
@@ -173,6 +215,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             }
             trafficBuffer.add(item)
             _trafficItems.postValue(trafficBuffer.toList())
+        }
+
+        // Real-time tick feed: record live multiplier ticks into LiveTickCadenceAnalyzer
+        val isMultiplierTick = transport == "WEBSOCKET" && (safePayload.contains("\"cmd\":85") || safePayload.contains("\"mul\""))
+        if (isMultiplierTick) {
+            liveTickAnalyzer.recordTick(System.currentTimeMillis())
         }
 
         // OPTIMIZATION: For crash packets, process on the current thread immediately
@@ -311,6 +359,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _currentRoundId.postValue(currentRoundId)
         _currentMultiplier.postValue(multiplier)
 
+        if (newState == GameState.LIVE || protocolEngine.currentState == GameState.LIVE) {
+            liveTickAnalyzer.recordTick(System.currentTimeMillis())
+        }
+
         when (newState) {
             GameState.LIVE -> _connectionStatus.postValue("OBSERVING")
             GameState.CRASH -> _connectionStatus.postValue("CRASH DETECTED")
@@ -330,6 +382,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         fastPathCrashFiredForRound.set(false)
         fastPathLastRoundId = roundId
 
+        // Reset live tick cadence analyzer for new round
+        liveTickAnalyzer.onNewRound(roundId)
+
         viewModelScope.launch(Dispatchers.IO) {
             protocolEngine.activeRound?.let {
                 db.roundDao().insertRound(it)
@@ -345,6 +400,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     override fun onPreCrashAlertCleared() {
         _preCrashAlert.postValue(null)
+        liveTickAnalyzer.resetAlertFired()
         onDiagnosticsReceived("[PRE_CRASH_SIGNAL] False alarm cleared - flight continuing")
     }
 
@@ -394,6 +450,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             _researchSummary.postValue(summary)
             _totalRounds.postValue(totalRCount)
 
+            // Diagnostics for live round tick cadence
+            val cadenceDiag = liveTickAnalyzer.getDiagnostics()
+            onDiagnosticsReceived("[CADENCE] Round finished at ${"%.2f".format(round.finalMultiplier)}x. $cadenceDiag")
+
             // Trigger Automatic Webhook Telemetry Sync if enabled
             if (webhookSyncManager.isSyncEnabled) {
                 webhookSyncManager.sendRoundTelemetry(round, allRoundEvents).onSuccess {
@@ -425,8 +485,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             db.featureDao().clearFeatures()
             db.featureDao().clearPatterns()
 
+            // Reset live cadence analyzer
+            liveTickAnalyzer.onNewRound("")
+
             _totalRounds.postValue(0)
             _totalEvents.postValue(0)
+            _tickFreezeStatus.postValue("")
             _researchSummary.postValue(ResearchSummary())
             onComplete()
         }
@@ -465,5 +529,6 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         tickerJob?.cancel()
+        riskMonitorJob?.cancel()
     }
 }
