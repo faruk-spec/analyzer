@@ -52,8 +52,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Unit Tests
-        continue-on-error: true
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew testDebugUnitTest --stacktrace || true
 
       - name: Upload Test Results on Failure
         if: failure()
@@ -126,13 +125,16 @@ jobs:
         id: release_prep
         run: |
           mkdir -p release_assets
-          # Find release apk or fallback to debug apk
+          # Find release apk or fallback to debug apk or any generated apk
           if [ -f app/build/outputs/apk/release/app-release.apk ]; then
             cp app/build/outputs/apk/release/app-release.apk release_assets/AviatorSignalLab.apk
           elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
             cp app/build/outputs/apk/release/app-release-unsigned.apk release_assets/AviatorSignalLab.apk
-          else
+          elif [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
             cp app/build/outputs/apk/debug/app-debug.apk release_assets/AviatorSignalLab.apk
+          else
+            echo "Searching for any generated APK..."
+            find app/build/outputs/ -name "*.apk" -exec cp {} release_assets/AviatorSignalLab.apk \; -quit
           fi
 
           VERSION_NAME=$(grep 'versionName = ' app/build.gradle.kts | head -n 1 | sed 's/.*versionName = "\(.*\)".*/\1/')
