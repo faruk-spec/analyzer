@@ -14,4 +14,5 @@ interface StateChangeListener {
     fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long)
     fun onRoundStarted(roundId: String, startTimestamp: Long)
     fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {}
+    fun onPreCrashAlertCleared() {}
 }

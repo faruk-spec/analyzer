@@ -134,8 +134,8 @@ class ProtocolDiscoveryEngineTest {
 
         assertEquals(false, alertTriggered)
 
-        // 3. Gap check 150ms later without receiving ticks -> pre-crash alert!
-        engine.checkInFlightGap(t0 + 2150L)
+        // 3. Gap check 400ms later without receiving ticks -> pre-crash alert!
+        engine.checkInFlightGap(t0 + 2400L)
 
         assertEquals(true, alertTriggered)
         assertEquals(1.45, alertMult, 0.001)

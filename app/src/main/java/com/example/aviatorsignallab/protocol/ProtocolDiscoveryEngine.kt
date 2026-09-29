@@ -34,24 +34,46 @@ class ProtocolDiscoveryEngine(
 
     private var lastLiveTickTimestamp: Long = 0L
     private var isPreCrashAlertFiredForRound: Boolean = false
+    private var alertFiredMultiplier: Double = 0.0
     private val rollingEventTypes = java.util.ArrayDeque<String>(8)
     private val activeValidatedPatterns = mutableSetOf<String>()
+
+    companion object {
+        fun isTrivialBaselinePattern(pattern: String): Boolean {
+            val tokens = pattern.split("->").map { it.trim() }
+            val baselineTypes = setOf(
+                "AVIATOR_MULTIPLIER_TICK",
+                "MULTIPLIER_UPDATE",
+                "WEBSOCKET_MESSAGE",
+                "DOM_MULTIPLIER_UPDATE",
+                "NONE",
+                ""
+            )
+            return tokens.all { it in baselineTypes }
+        }
+    }
 
     fun updateValidatedPatterns(patterns: List<String>) {
         synchronized(activeValidatedPatterns) {
             activeValidatedPatterns.clear()
-            activeValidatedPatterns.addAll(patterns)
+            // Exclude trivial heartbeat ticks that occur in every normal flight
+            val filtered = patterns.filter { !isTrivialBaselinePattern(it) }
+            activeValidatedPatterns.addAll(filtered)
         }
     }
 
     @Synchronized
     fun checkInFlightGap(currentTime: Long) {
-        if (currentState == GameState.LIVE && !isPreCrashAlertFiredForRound && currentMultiplier >= 1.15 && lastLiveTickTimestamp > 0) {
+        if (currentState == GameState.LIVE && lastLiveTickTimestamp > 0) {
             val gap = currentTime - lastLiveTickTimestamp
-            // If stream pauses during active flight for >125ms, Spribe tick loop has halted to transition to crash
-            if (gap in 125..2000) {
-                isPreCrashAlertFiredForRound = true
-                listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "TICK_STREAM_QUIET_GAP_${gap}ms")
+            // A true halt in the Spribe Aviator multiplier tick stream is >= 350ms (3 to 4 missed ticks).
+            // Thresholds under 300ms trigger false alarms from standard mobile internet packet jitter.
+            if (gap in 350..3000) {
+                if (!isPreCrashAlertFiredForRound && currentMultiplier >= 1.20) {
+                    isPreCrashAlertFiredForRound = true
+                    alertFiredMultiplier = currentMultiplier
+                    listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "STREAM_HALT_${gap}ms")
+                }
             }
         }
     }
@@ -79,7 +101,7 @@ class ProtocolDiscoveryEngine(
         val extractedRoundId = discoverRoundId(fieldMap)
         val isCrashSignal = detectCrashSignal(sanitized, fieldMap)
 
-        if (command == "85") {
+        if (command == "85" || extractedMultiplier != null) {
             lastLiveTickTimestamp = timestamp
         }
 
@@ -97,6 +119,7 @@ class ProtocolDiscoveryEngine(
 
         if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
             val finalMult = extractedMultiplier ?: currentMultiplier
+            listener?.onPreCrashAlert(currentRoundId, finalMult, "CRITICAL", "FLEW_AWAY_SIGNAL")
             transitionToCrash(timestamp, finalMult)
         } else if (extractedMultiplier != null && extractedMultiplier >= 1.0) {
             handleMultiplierUpdate(extractedMultiplier, extractedRoundId, timestamp)
@@ -104,16 +127,19 @@ class ProtocolDiscoveryEngine(
             transitionToStart(extractedRoundId, timestamp)
         }
 
-        // Live Pattern sequence matching during airborne flight
-        if (currentState == GameState.LIVE && !isPreCrashAlertFiredForRound && currentMultiplier >= 1.08) {
+        // Live Pattern sequence matching during airborne flight (Non-trivial anomaly sequences only)
+        if (currentState == GameState.LIVE && !isPreCrashAlertFiredForRound && currentMultiplier >= 1.20) {
             synchronized(rollingEventTypes) {
                 if (rollingEventTypes.size >= 8) rollingEventTypes.removeFirst()
                 rollingEventTypes.addLast(eventType)
                 val seq = rollingEventTypes.toList().takeLast(4).joinToString("->")
-                synchronized(activeValidatedPatterns) {
-                    if (activeValidatedPatterns.any { seq.contains(it) || it.contains(seq) }) {
-                        isPreCrashAlertFiredForRound = true
-                        listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "PATTERN_MATCH:$seq")
+                if (!isTrivialBaselinePattern(seq)) {
+                    synchronized(activeValidatedPatterns) {
+                        if (activeValidatedPatterns.any { seq.contains(it) || it.contains(seq) }) {
+                            isPreCrashAlertFiredForRound = true
+                            alertFiredMultiplier = currentMultiplier
+                            listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "PATTERN_MATCH:$seq")
+                        }
                     }
                 }
             }
@@ -173,6 +199,13 @@ class ProtocolDiscoveryEngine(
                 }
             }
             GameState.LIVE -> {
+                // If stream resumes ticking and climbing above the alert multiplier, clear false alarm and re-arm!
+                if (isPreCrashAlertFiredForRound && newMultiplier >= alertFiredMultiplier + 0.05) {
+                    isPreCrashAlertFiredForRound = false
+                    alertFiredMultiplier = 0.0
+                    listener?.onPreCrashAlertCleared()
+                }
+
                 // Check if multiplier reset or dropped back to 1.00x after climbing!
                 if (currentMultiplier > 1.10 && newMultiplier <= 1.05) {
                     // Multiplier reset indicates previous round crashed!
@@ -208,6 +241,7 @@ class ProtocolDiscoveryEngine(
         lastCrashTimestamp = 0L
 
         isPreCrashAlertFiredForRound = false
+        alertFiredMultiplier = 0.0
         lastLiveTickTimestamp = 0L
         synchronized(rollingEventTypes) { rollingEventTypes.clear() }
 
@@ -235,6 +269,7 @@ class ProtocolDiscoveryEngine(
         lastCrashTimestamp = timestamp
         currentMultiplier = finalMultiplier
         isPreCrashAlertFiredForRound = false
+        alertFiredMultiplier = 0.0
 
         activeRound?.let {
             it.endTime = timestamp

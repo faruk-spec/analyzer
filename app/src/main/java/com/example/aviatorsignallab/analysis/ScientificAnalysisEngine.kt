@@ -49,6 +49,9 @@ class ScientificAnalysisEngine {
         val totalTrainCrashes = trainCrashFeatures.map { it.roundId }.distinct().size
 
         for ((seq, count) in sequenceCountsInCrash) {
+            if (com.example.aviatorsignallab.protocol.ProtocolDiscoveryEngine.isTrivialBaselinePattern(seq)) {
+                continue
+            }
             val supportPct = count.toDouble() / totalTrainCrashes.toDouble()
             // Only examine sequences appearing in at least 30% of crashes
             if (supportPct >= 0.30) {

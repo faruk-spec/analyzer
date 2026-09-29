@@ -290,6 +290,11 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         onDiagnosticsReceived("[PRE_CRASH_SIGNAL] Immediate alert at ${currentMultiplier}x ($reason)")
     }
 
+    override fun onPreCrashAlertCleared() {
+        _preCrashAlert.postValue(null)
+        onDiagnosticsReceived("[PRE_CRASH_SIGNAL] False alarm cleared - flight continuing")
+    }
+
     override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {
         _currentMultiplier.postValue(finalMultiplier)
         _preCrashAlert.postValue(null)
