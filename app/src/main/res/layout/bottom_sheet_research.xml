@@ -5,7 +5,7 @@
     android:id="@+id/bottomSheetContainer"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_card"
+    android:background="@drawable/bg_bottom_sheet"
     android:orientation="vertical"
     android:padding="16dp"
     app:behavior_hideable="true"

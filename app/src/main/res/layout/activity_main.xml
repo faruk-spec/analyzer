@@ -25,15 +25,16 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="12dp"
-            android:paddingTop="14dp"
+            android:paddingTop="12dp"
             android:paddingEnd="12dp"
-            android:paddingBottom="12dp">
+            android:paddingBottom="10dp">
 
             <ImageView
                 android:layout_width="26dp"
                 android:layout_height="26dp"
                 android:contentDescription="@string/app_name"
-                android:src="@drawable/ic_flight" />
+                android:src="@drawable/ic_flight"
+                app:tint="@color/accent_cyan" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -48,7 +49,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/app_name"
                     android:textColor="@color/text_primary"
-                    android:textSize="15sp"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -57,7 +58,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/target_website_label"
                     android:textColor="@color/accent_cyan"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
             </LinearLayout>
 
             <!-- Status Pill Badge -->
@@ -72,11 +73,21 @@
                 android:textSize="10sp"
                 android:textStyle="bold" />
 
+            <!-- Floating Bubble Mode Toggle Button -->
+            <ImageButton
+                android:id="@+id/btnToggleBubble"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Bubble Overlay Mode"
+                android:src="@drawable/ic_bubble"
+                app:tint="@color/accent_purple" />
+
             <!-- Webhook Stream Sync Button -->
             <ImageButton
                 android:id="@+id/btnWebhookSync"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Webhook Sync"
                 android:src="@drawable/ic_cloud_upload"
@@ -85,59 +96,97 @@
             <!-- Diagnostics Action Button -->
             <ImageButton
                 android:id="@+id/btnOpenDiagnostics"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Diagnostics"
+                android:contentDescription="Traffic Inspector"
                 android:src="@android:drawable/ic_menu_info_details"
                 app:tint="@color/text_secondary" />
 
             <!-- Update Action Button -->
             <ImageButton
                 android:id="@+id/btnCheckUpdate"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Update"
                 android:src="@drawable/ic_download"
                 app:tint="@color/accent_cyan" />
         </LinearLayout>
 
-        <!-- Real-Time Metrics Strip -->
+        <!-- Real-Time Metrics Strip (Collapsible via Bubble Mode) -->
         <HorizontalScrollView
+            android:id="@+id/metricsStrip"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/bg_card"
+            android:background="#0F1626"
             android:scrollbars="none">
 
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="12dp"
                 android:paddingTop="6dp"
                 android:paddingEnd="12dp"
                 android:paddingBottom="6dp">
 
-                <!-- Metric: Rounds -->
+                <!-- Hero Multiplier Display -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
-                    android:orientation="vertical">
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_metric_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/metric_rounds"
+                        android:layout_marginEnd="6dp"
+                        android:text="MULT"
                         android:textColor="@color/text_muted"
-                        android:textSize="10sp" />
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
                     <TextView
-                        android:id="@+id/tvMetricRounds"
+                        android:id="@+id/tvMetricMultiplier"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0"
-                        android:textColor="@color/text_primary"
-                        android:textSize="13sp"
+                        android:fontFamily="sans-serif-black"
+                        android:text="--"
+                        android:textColor="@color/accent_cyan"
+                        android:textSize="16sp" />
+                </LinearLayout>
+
+                <!-- Current Round Chip (Click to copy) -->
+                <LinearLayout
+                    android:id="@+id/chipCurRound"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_metric_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:text="ROUND"
+                        android:textColor="@color/text_muted"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvMetricCurRound"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="--"
+                        android:textColor="@color/accent_purple"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -145,65 +194,57 @@
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
-                    android:orientation="vertical">
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_metric_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/metric_events"
+                        android:layout_marginEnd="6dp"
+                        android:text="EVT"
                         android:textColor="@color/text_muted"
-                        android:textSize="10sp" />
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
                     <TextView
                         android:id="@+id/tvMetricEvents"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
                         android:text="0"
-                        android:textColor="@color/accent_cyan"
-                        android:textSize="13sp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <!-- Metric: Current Round -->
+                <!-- Metric: Rounds Recorded -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
-                    android:orientation="vertical">
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/metric_cur_round"
-                        android:textColor="@color/text_muted"
-                        android:textSize="10sp" />
-                    <TextView
-                        android:id="@+id/tvMetricCurRound"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="--"
-                        android:textColor="@color/accent_purple"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_metric_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <!-- Metric: Multiplier -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
-                    android:orientation="vertical">
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/metric_cur_mult"
+                        android:layout_marginEnd="6dp"
+                        android:text="ROUNDS"
                         android:textColor="@color/text_muted"
-                        android:textSize="10sp" />
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
                     <TextView
-                        android:id="@+id/tvMetricMultiplier"
+                        android:id="@+id/tvMetricRounds"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="1.00x"
-                        android:textColor="@color/accent_amber"
-                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:text="0"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -211,21 +252,28 @@
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
-                    android:orientation="vertical">
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_metric_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/metric_elapsed"
+                        android:layout_marginEnd="6dp"
+                        android:text="TIME"
                         android:textColor="@color/text_muted"
-                        android:textSize="10sp" />
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
                     <TextView
                         android:id="@+id/tvMetricElapsed"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
                         android:text="0.0s"
                         android:textColor="@color/text_primary"
-                        android:textSize="13sp"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -233,20 +281,27 @@
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:background="@drawable/bg_metric_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/metric_event_rate"
+                        android:layout_marginEnd="6dp"
+                        android:text="RATE"
                         android:textColor="@color/text_muted"
-                        android:textSize="10sp" />
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
                     <TextView
                         android:id="@+id/tvMetricEventRate"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
                         android:text="0 evt/s"
                         android:textColor="@color/accent_emerald"
-                        android:textSize="13sp"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -264,7 +319,7 @@
             android:progressDrawable="@drawable/bg_status_badge"
             android:visibility="gone" />
 
-        <!-- WebView Container -->
+        <!-- WebView Container with Floating Bubble Overlay Widget -->
         <FrameLayout
             android:id="@+id/webViewContainer"
             android:layout_width="match_parent"
@@ -275,7 +330,53 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <!-- Floating Overlay Button to Expand Research Sheet -->
+            <!-- Floating Bubble Overlay Widget (When HUD Strip is Collapsed) -->
+            <LinearLayout
+                android:id="@+id/floatingBubbleWidget"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_floating_bubble"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:text="⚡"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tvBubbleMultiplier"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-black"
+                    android:text="--"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="12dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@color/bg_card_border" />
+
+                <TextView
+                    android:id="@+id/tvBubbleStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="STANDBY"
+                    android:textColor="@color/accent_cyan"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Floating Action Button to Expand Research Sheet -->
             <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
                 android:id="@+id/fabResearchPanel"
                 android:layout_width="wrap_content"

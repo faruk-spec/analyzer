@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
     private val viewModel: ResearchViewModel by viewModels()
     private lateinit var bottomSheetBehavior: BottomSheetBehavior<View>
     private lateinit var updateManager: UpdateManager
+    private var isBubbleModeActive: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -129,24 +130,34 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
     private fun observeViewModel() {
         viewModel.connectionStatus.observe(this) { status ->
             binding.tvConnectionStatus.text = status
+            binding.tvBubbleStatus.text = status
+
             if (status == "STANDBY" || viewModel.currentRoundId.value == "--") {
                 binding.tvMetricMultiplier.text = "--"
+                binding.tvBubbleMultiplier.text = "--"
+                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
             }
             when (status) {
                 "OBSERVING" -> {
                     binding.tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
+                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
                 }
                 "CRASH DETECTED" -> {
                     binding.tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                    binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 }
                 "ROUND START" -> {
                     binding.tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
                 }
                 "PAUSED" -> {
                     binding.tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
+                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
                 }
                 else -> {
                     binding.tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
                 }
             }
         }
@@ -163,14 +174,35 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             binding.tvMetricCurRound.text = roundId
             if (roundId == "--" || viewModel.connectionStatus.value == "STANDBY") {
                 binding.tvMetricMultiplier.text = "--"
+                binding.tvBubbleMultiplier.text = "--"
             }
         }
 
         viewModel.currentMultiplier.observe(this) { mult ->
             if (viewModel.connectionStatus.value == "STANDBY" || viewModel.currentRoundId.value == "--") {
                 binding.tvMetricMultiplier.text = "--"
+                binding.tvBubbleMultiplier.text = "--"
+                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
             } else {
-                binding.tvMetricMultiplier.text = "%.2fx".format(mult)
+                val formatted = "%.2fx".format(mult)
+                binding.tvMetricMultiplier.text = formatted
+                binding.tvBubbleMultiplier.text = formatted
+
+                // Color adaptive shift
+                when {
+                    viewModel.connectionStatus.value == "CRASH DETECTED" -> {
+                        binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                    }
+                    mult >= 10.0 -> {
+                        binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_purple))
+                    }
+                    mult >= 2.0 -> {
+                        binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
+                    }
+                    else -> {
+                        binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+                    }
+                }
             }
         }
 
@@ -207,6 +239,23 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
     private fun setupListeners() {
         val sheet = binding.bottomSheetResearch
+
+        binding.btnToggleBubble.setOnClickListener {
+            toggleBubbleOverlayMode()
+        }
+
+        binding.floatingBubbleWidget.setOnClickListener {
+            toggleBubbleOverlayMode()
+        }
+
+        binding.chipCurRound.setOnClickListener {
+            val rid = viewModel.currentRoundId.value ?: "--"
+            if (rid != "--") {
+                val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Round ID", rid))
+                Toast.makeText(this, "Copied Round ID: $rid", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         binding.btnOpenDiagnostics.setOnClickListener {
             TrafficInspectorDialog(this, viewModel).show()
@@ -275,6 +324,21 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
+        }
+    }
+
+    private fun toggleBubbleOverlayMode() {
+        isBubbleModeActive = !isBubbleModeActive
+        if (isBubbleModeActive) {
+            binding.metricsStrip.visibility = View.GONE
+            binding.floatingBubbleWidget.visibility = View.VISIBLE
+            binding.btnToggleBubble.imageTintList = android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this, R.color.accent_cyan))
+            Toast.makeText(this, "Bubble Overlay Mode Enabled", Toast.LENGTH_SHORT).show()
+        } else {
+            binding.metricsStrip.visibility = View.VISIBLE
+            binding.floatingBubbleWidget.visibility = View.GONE
+            binding.btnToggleBubble.imageTintList = android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this, R.color.accent_purple))
+            Toast.makeText(this, "Restored Full Cockpit HUD", Toast.LENGTH_SHORT).show()
         }
     }
 
