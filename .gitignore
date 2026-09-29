@@ -16,3 +16,5 @@ local.properties
 release-keystore.jks
 app/build/
 build/
+data.zip
+data_extracted/

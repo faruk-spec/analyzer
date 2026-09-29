@@ -63,6 +63,10 @@ class ProtocolDiscoveryEngine(
             transitionToStart(extractedRoundId, timestamp)
         }
 
+        if (command == "84" && fieldMap["sta"] == "2") {
+            transitionToLive()
+        }
+
         if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
             val finalMult = extractedMultiplier ?: currentMultiplier
             transitionToCrash(timestamp, finalMult)
@@ -222,6 +226,19 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun discoverEventType(sanitized: String, fields: Map<String, String>, transport: String): String {
+        val cmd = fields["cmd"]
+        val sta = fields["sta"]
+        if (cmd == "84") {
+            return when (sta) {
+                "1" -> "AVIATOR_BETTING_START"
+                "2" -> "AVIATOR_TAKEOFF"
+                "3" -> "GAME_CRASH"
+                "4" -> "AVIATOR_SETTLING"
+                else -> "AVIATOR_STAGE_$sta"
+            }
+        }
+        if (cmd == "85") return "AVIATOR_MULTIPLIER_TICK"
+
         for (key in listOf("type", "event", "action", "msg_type", "message_type", "cmd", "op")) {
             fields[key]?.let { if (it.isNotBlank()) return it }
         }
@@ -245,8 +262,24 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun discoverMultiplier(sanitized: String, fields: Map<String, String>): Double? {
-        // 1. Direct field checking across explicit multiplier keys
+        // 0. Filter out false casino lobby percentage strings (e.g. RTP 97.22%)
+        if (sanitized.contains("RTP", ignoreCase = true) || sanitized.contains("%")) {
+            return null
+        }
+
+        // 1. Spribe Aviator protocol key: "mul" (e.g. {"cmd":85,"mul":"1.36"} or {"cmd":84,"sta":3,"mul":"3.36"})
+        fields["mul"]?.let { v ->
+            val cleaned = v.replace("x", "", ignoreCase = true).trim()
+            cleaned.toDoubleOrNull()?.let { num ->
+                if (num in 1.0..100000.0) return num
+            }
+        }
+
+        // 2. Direct field checking across explicit multiplier keys
         for ((path, v) in fields) {
+            val lowerPath = path.lowercase()
+            if (lowerPath.contains("winodds") || lowerPath.contains("platformlist") || lowerPath.contains("rtp")) continue
+
             val key = path.substringAfterLast(".").substringBefore("[").lowercase()
             if (key in listOf("multiplier", "coefficient", "coef", "odds", "currmult", "finalmult")) {
                 val cleaned = v.replace("x", "", ignoreCase = true).replace("@", "").trim()
@@ -256,19 +289,19 @@ class ProtocolDiscoveryEngine(
             }
         }
 
-        // 2. Regex pattern 1: "1.45x" or "10.50 X" or "x1.45"
+        // 3. Regex pattern 1: "1.45x" or "10.50 X" or "x1.45"
         val m1 = multRegex1.find(sanitized)
         if (m1 != null) {
             m1.groupValues[1].toDoubleOrNull()?.let { return it }
         }
 
-        // 3. Regex pattern 2: "multiplier": 1.45 or "coefficient": 1.45
+        // 4. Regex pattern 2: "multiplier": 1.45 or "coefficient": 1.45
         val m2 = multRegex2.find(sanitized)
         if (m2 != null) {
             m2.groupValues[1].toDoubleOrNull()?.let { return it }
         }
 
-        // 4. Socket.io array payload like 42["multi", 1.45] or ["flying", 2.10]
+        // 5. Socket.io array payload like 42["multi", 1.45] or ["flying", 2.10]
         val m3 = Regex("""\[\s*["'](?:multi|flying|tick|odds|rate|stage|point|score|crash)["']\s*,\s*([0-9]{1,4}(?:\.[0-9]{1,4})?)""", RegexOption.IGNORE_CASE).find(sanitized)
         if (m3 != null) {
             m3.groupValues[1].toDoubleOrNull()?.let { if (it in 1.0..100000.0) return it }
@@ -278,17 +311,30 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun discoverRoundId(fields: Map<String, String>): String? {
+        // 1. Spribe Aviator protocol key: "rbd" (Round Based ID, e.g. "25068823")
+        fields["rbd"]?.let { rbd ->
+            val trimmed = rbd.trim()
+            if (trimmed.length >= 5 && trimmed.any { it.isDigit() }) {
+                return trimmed
+            }
+        }
+
+        // 2. Standard round ID keys (reject game titles and casino lobby vendor names)
         for ((path, v) in fields) {
             if (v.isBlank() || v == "[REDACTED]" || v == "null" || v == "0") continue
+            val lowerPath = path.lowercase()
+            if (lowerPath.contains("platformlist") || lowerPath.contains("gamelogo") || lowerPath.contains("gamename")) continue
+
             val key = path.substringAfterLast(".").substringBefore("[").lowercase()
             if (key in listOf("round_id", "roundid", "game_round_id", "round_number", "roundno")) {
                 if (v.length in 3..40 && !v.equals("true", ignoreCase = true) && !v.equals("false", ignoreCase = true)) {
-                    return v
-                }
-            } else if (key in listOf("game_id", "gameid")) {
-                // Must be an instance/round identifier (e.g. numeric ID >= 5 digits or containing dash)
-                if (v.length >= 5 && v.any { it.isDigit() }) {
-                    return v
+                    // Reject known game titles / vendor names
+                    if (!v.contains("Blackjack", ignoreCase = true) &&
+                        !v.contains("Roulette", ignoreCase = true) &&
+                        !v.contains("Chess", ignoreCase = true) &&
+                        !v.contains("Vendor", ignoreCase = true)) {
+                        return v
+                    }
                 }
             }
         }
@@ -296,6 +342,15 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun detectCrashSignal(sanitized: String, fields: Map<String, String>): Boolean {
+        // 1. Spribe Aviator exact crash command: cmd 84, sta 3
+        if (fields["cmd"] == "84" && fields["sta"] == "3") {
+            return true
+        }
+        if (sanitized.contains("\"cmd\":84") && sanitized.contains("\"sta\":3")) {
+            return true
+        }
+
+        // 2. Textual and explicit crash signals
         for ((k, v) in fields) {
             if (k.contains("status", ignoreCase = true) || k.contains("state", ignoreCase = true) || k.contains("event", ignoreCase = true) || k.contains("type", ignoreCase = true)) {
                 if (v.equals("crash", ignoreCase = true) ||

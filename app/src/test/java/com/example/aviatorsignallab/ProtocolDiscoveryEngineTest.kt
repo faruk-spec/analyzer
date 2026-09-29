@@ -54,4 +54,56 @@ class ProtocolDiscoveryEngineTest {
         assertEquals(GameState.CRASH, engine.currentState)
         assertEquals(2.18, engine.currentMultiplier, 0.001)
     }
+
+    @Test
+    fun testSpribeAviatorExactProtocolLifecycle() {
+        val engine = ProtocolDiscoveryEngine()
+
+        // 1. Spribe Aviator cmd 84, sta 1 with rbd "25068823"
+        val initPayload = """{"cmd":84,"sta":1,"rbd":"25068823","ttl":5}"""
+        engine.processRawEvent("WEBSOCKET", "INCOMING", initPayload)
+
+        assertEquals("25068823", engine.currentRoundId)
+        assertEquals(GameState.ROUND_START, engine.currentState)
+
+        // 2. Takeoff: cmd 84, sta 2, mul "1.00"
+        val takeoffPayload = """{"cmd":84,"sta":2,"mul":"1.00"}"""
+        engine.processRawEvent("WEBSOCKET", "INCOMING", takeoffPayload)
+
+        assertEquals(GameState.LIVE, engine.currentState)
+        assertEquals(1.00, engine.currentMultiplier, 0.001)
+
+        // 3. Flight tick: cmd 85, mul "1.36"
+        val tickPayload = """{"cmd":85,"mul":"1.36"}"""
+        engine.processRawEvent("WEBSOCKET", "INCOMING", tickPayload)
+
+        assertEquals(GameState.LIVE, engine.currentState)
+        assertEquals(1.36, engine.currentMultiplier, 0.001)
+
+        // 4. Crash: cmd 84, sta 3, mul "3.36"
+        val crashPayload = """{"cmd":84,"sta":3,"mul":"3.36","ss":"6eRsQm7aJs9ZPrbw9LE7TRv2aTbFDb"}"""
+        engine.processRawEvent("WEBSOCKET", "INCOMING", crashPayload)
+
+        assertEquals(GameState.CRASH, engine.currentState)
+        assertEquals(3.36, engine.currentMultiplier, 0.001)
+    }
+
+    @Test
+    fun testCasinoLobbyRtpAndBlackjackRejected() {
+        val engine = ProtocolDiscoveryEngine()
+
+        // 1. Lobby RTP percentage should be rejected
+        val rtpPayload = """{"type":"DOM_MULTIPLIER_UPDATE","multiplier":"97.22","rawText":"RTP\n97.22%"}"""
+        engine.processRawEvent("DOM", "INTERNAL", rtpPayload)
+
+        assertEquals(GameState.UNKNOWN, engine.currentState)
+        assertEquals("--", engine.currentRoundId)
+
+        // 2. Lobby platformList containing blackjack game should be rejected as round ID
+        val lobbyCatalog = """{"data":{"popular":{"platformList":[{"vendorId":23,"gameNameEn":"MultihandBlackjackPro2","winOdds":96.01}]}}}"""
+        engine.processRawEvent("XHR", "INCOMING", lobbyCatalog)
+
+        assertEquals(GameState.UNKNOWN, engine.currentState)
+        assertEquals("--", engine.currentRoundId)
+    }
 }
