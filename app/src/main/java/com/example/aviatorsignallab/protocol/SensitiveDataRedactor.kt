@@ -108,7 +108,7 @@ object SensitiveDataRedactor {
         try {
             val element = JsonParser.parseString(rawJson)
             flattenElement("", element, paths)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
         return paths
     }
 

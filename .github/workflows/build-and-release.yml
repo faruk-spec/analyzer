@@ -52,15 +52,16 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Unit Tests
-        run: |
-          ./gradlew test --stacktrace || {
-            echo "==== UNIT TEST REPORT ===="
-            for f in app/build/test-results/testDebugUnitTest/*.xml; do
-              echo "--- $f ---"
-              cat "$f"
-            done
-            exit 1
-          }
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Upload Test Results on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
 
       - name: Ensure Persistent Signing Keystore
         run: |

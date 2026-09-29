@@ -138,7 +138,7 @@ object CsvExporter {
                         ).joinToString(",")
                         writer.write(line + "\n")
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {}
             }
         }
     }
