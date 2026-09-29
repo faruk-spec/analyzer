@@ -146,24 +146,6 @@ class ProtocolDiscoveryEngine(
             transitionToStart(extractedRoundId, timestamp)
         }
 
-        // Live Pattern sequence matching during airborne flight (Non-trivial anomaly sequences only)
-        if (currentState == GameState.LIVE && !isPreCrashAlertFiredForRound && currentMultiplier >= 1.20) {
-            synchronized(rollingEventTypes) {
-                if (rollingEventTypes.size >= 8) rollingEventTypes.removeFirst()
-                rollingEventTypes.addLast(eventType)
-                val seq = rollingEventTypes.toList().takeLast(4).joinToString("->")
-                if (!isTrivialBaselinePattern(seq)) {
-                    synchronized(activeValidatedPatterns) {
-                        if (activeValidatedPatterns.any { seq.contains(it) || it.contains(seq) }) {
-                            isPreCrashAlertFiredForRound = true
-                            alertFiredMultiplier = currentMultiplier
-                            listener?.onPreCrashAlert(currentRoundId, currentMultiplier, "HIGH", "PATTERN_MATCH:$seq")
-                        }
-                    }
-                }
-            }
-        }
-
         // 4. Construct LiveEvent
         val elapsed = if (currentState == GameState.UNKNOWN) 0L else (timestamp - roundStartTime).coerceAtLeast(0L)
         val isPostCrash = (currentState == GameState.CRASH || currentState == GameState.ROUND_COMPLETE || (lastCrashTimestamp > 0 && timestamp >= lastCrashTimestamp))
@@ -218,13 +200,6 @@ class ProtocolDiscoveryEngine(
                 }
             }
             GameState.LIVE -> {
-                // If stream resumes ticking and climbing above the alert multiplier, clear false alarm and re-arm!
-                if (isPreCrashAlertFiredForRound && newMultiplier >= alertFiredMultiplier + 0.05) {
-                    isPreCrashAlertFiredForRound = false
-                    alertFiredMultiplier = 0.0
-                    listener?.onPreCrashAlertCleared()
-                }
-
                 // Check if multiplier reset or dropped back to 1.00x after climbing!
                 if (currentMultiplier > 1.10 && newMultiplier <= 1.05) {
                     // Multiplier reset indicates previous round crashed!

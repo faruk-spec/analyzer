@@ -270,26 +270,26 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         viewModel.preCrashAlert.observe(this) { alert ->
             if (alert != null && alert.active) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
-                val isFreeze = alert.reason.startsWith("TICK_FREEZE")
-                val isExactCrash = alert.reason.contains("FLEW_AWAY") || alert.reason.contains("CRASH")
+                val isFreeze = alert.reason.contains("FREEZE")
+                val isExactCrash = alert.reason.contains("FLEW_AWAY")
                 val isFastPath = alert.reason.contains("FAST_CRASH_SIGNAL")
                 if (isFreeze) {
-                    val gap = alert.reason.substringAfter("TICK_FREEZE_").substringBefore("ms")
-                    binding.tvAlertTitle.text = "⚡ PRE-CRASH FREEZE @ %.2fx".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "Cadence Silent (${gap}ms) • Cash Out Imminent"
+                    val gap = alert.reason.substringAfter("FREEZE_").substringBefore("ms")
+                    binding.tvAlertTitle.text = "⚡ FINAL EXIT @ %.2fx".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "Cadence Silent (${gap}ms) • Cash Out Now"
                     binding.tvBubbleStatus.text = "⚡EXIT!"
                 } else if (isFastPath) {
-                    binding.tvAlertTitle.text = "⚡ SIGNAL @ %.2fx".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "Fast-Path Pre-Crash • ~15ms Ahead"
-                    binding.tvBubbleStatus.text = "⚡SIGNAL!"
+                    binding.tvAlertTitle.text = "⚡ FINAL EXIT @ %.2fx".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "WebSocket Fast-Path Crash Intercepted"
+                    binding.tvBubbleStatus.text = "⚡EXIT!"
                 } else if (isExactCrash) {
                     binding.tvAlertTitle.text = "FLEW AWAY @ %.2fx".format(alert.multiplier)
                     binding.tvAlertSubtitle.text = "Exact Crash Instant • Round Concluded"
                     binding.tvBubbleStatus.text = "CRASH!"
                 } else {
-                    binding.tvAlertTitle.text = "SIGNAL: FLEW AWAY IMMINENT (%.2fx)".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "Anomaly: ${alert.reason} | Confidence: ${alert.confidence}"
-                    binding.tvBubbleStatus.text = "SIGNAL!"
+                    binding.tvAlertTitle.text = "⚡ FINAL EXIT @ %.2fx".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "Signal: ${alert.reason}"
+                    binding.tvBubbleStatus.text = "⚡EXIT!"
                 }
 
                 // Instant Haptic Vibration

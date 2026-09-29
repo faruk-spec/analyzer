@@ -165,22 +165,26 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private fun startRiskMonitor() {
         riskMonitorJob = viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
-                delay(15L)
+                delay(20L)
                 if (protocolEngine.currentState == GameState.LIVE) {
                     val currentMult = protocolEngine.currentMultiplier
                     val result = liveTickAnalyzer.checkForFreeze(System.currentTimeMillis(), currentMult)
                     _tickFreezeStatus.postValue(result.status)
 
-                    if (result.freezeDetected && !liveTickAnalyzer.hasAlertFired) {
+                    // STRICT: Only fire ONE final alert per round across both freeze and fast-path
+                    if (result.freezeDetected && !liveTickAnalyzer.hasAlertFired && !fastPathCrashFiredForRound.get()) {
                         liveTickAnalyzer.markAlertFired()
+                        fastPathCrashFiredForRound.set(true)
+                        fastPathLastRoundId = protocolEngine.currentRoundId
+
                         _preCrashAlert.postValue(PreCrashAlertState(
                             active = true,
                             roundId = protocolEngine.currentRoundId,
                             multiplier = currentMult,
-                            confidence = "HIGH",
+                            confidence = "FINAL",
                             reason = "TICK_FREEZE_${result.currentGapMs}ms"
                         ))
-                        onDiagnosticsReceived("[LIVE_DETECT] ⚡ TICK FREEZE at ${"%.2f".format(currentMult)}x — gap ${result.currentGapMs}ms (avg ${result.avgIntervalMs}ms, ${"%.1f".format(result.freezeRatio)}x normal)")
+                        onDiagnosticsReceived("[FINAL_SIGNAL] ⚡ PRE-CRASH FREEZE at ${"%.2f".format(currentMult)}x — silence ${result.currentGapMs}ms (avg ${result.avgIntervalMs}ms)")
                     }
                 } else {
                     _tickFreezeStatus.postValue("")
@@ -249,9 +253,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     /**
      * FAST-PATH: Called directly from the JS bridge thread the instant a crash pattern
      * is detected via raw string matching in JavaScript. This fires ~10-20ms BEFORE
-     * the normal processRawEvent pipeline even begins, giving the user advance warning.
+     * the normal processRawEvent pipeline even begins.
      *
-     * No JSON parsing, no coroutine scheduling, no GSON — pure speed.
+     * STRICT: Deduplicated with cadence freeze so only ONE final signal ever fires.
      */
     override fun onCrashFastPath(multiplierStr: String) {
         val currentRound = protocolEngine.currentRoundId
@@ -260,19 +264,21 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         // Only fire if we're actually in a live round and haven't already fired for this round
         if (protocolEngine.currentState != GameState.LIVE && protocolEngine.currentState != GameState.ROUND_START) return
 
-        // Dedup: one fast-path alert per round
+        // Dedup: exactly one alert per round across both fast-path and cadence freeze
         synchronized(this) {
             if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) return
+            if (liveTickAnalyzer.hasAlertFired) return
             fastPathLastRoundId = currentRound
             fastPathCrashFiredForRound.set(true)
+            liveTickAnalyzer.markAlertFired()
         }
 
         val mult = multiplierStr.toDoubleOrNull() ?: currentMult
         val finalMult = if (mult > 0.0) mult else currentMult
 
         // Fire alert IMMEDIATELY — no postValue delay, direct post
-        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, finalMult, "CRITICAL", "FAST_CRASH_SIGNAL"))
-        onDiagnosticsReceived("[FAST_PATH] ⚡ Pre-crash alert at ${finalMult}x — ~15ms ahead of normal pipeline")
+        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, finalMult, "FINAL", "FAST_CRASH_SIGNAL"))
+        onDiagnosticsReceived("[FINAL_SIGNAL] ⚡ Fast crash intercepted at ${finalMult}x via WebSocket fast-path")
     }
 
     override fun onDiagnosticsReceived(message: String) {
@@ -394,27 +400,34 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     }
 
     override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
-        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, confidence, reason))
-        onDiagnosticsReceived("[PRE_CRASH_SIGNAL] Immediate alert at ${currentMultiplier}x ($reason)")
+        // STRICT: Only one alert per round across all subsystems
+        if (fastPathCrashFiredForRound.get() || liveTickAnalyzer.hasAlertFired) return
+        fastPathCrashFiredForRound.set(true)
+        fastPathLastRoundId = roundId
+        liveTickAnalyzer.markAlertFired()
+
+        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, "FINAL", reason))
+        onDiagnosticsReceived("[FINAL_SIGNAL] Immediate alert at ${currentMultiplier}x ($reason)")
     }
 
     override fun onPreCrashAlertCleared() {
-        _preCrashAlert.postValue(null)
-        liveTickAnalyzer.resetAlertFired()
-        onDiagnosticsReceived("[PRE_CRASH_SIGNAL] False alarm cleared - flight continuing")
+        // STRICT: Never clear mid-flight! Signal is final once issued for the round.
     }
 
     override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {
         _currentMultiplier.postValue(finalMultiplier)
 
-        // Only post crash alert if fast-path didn't already fire one for this round
+        // Only post crash alert if neither fast-path nor freeze alert fired yet
         if (!fastPathCrashFiredForRound.get()) {
-            _preCrashAlert.postValue(PreCrashAlertState(true, roundId, finalMultiplier, "CRITICAL", "FLEW_AWAY_EXACT"))
+            fastPathCrashFiredForRound.set(true)
+            fastPathLastRoundId = roundId
+            liveTickAnalyzer.markAlertFired()
+            _preCrashAlert.postValue(PreCrashAlertState(true, roundId, finalMultiplier, "FINAL", "FLEW_AWAY_EXACT"))
         } else {
-            // Fast-path already showed the alert — just update the multiplier if it changed
+            // Keep the final alert active and ensure final multiplier is reflected
             val current = _preCrashAlert.value
             if (current != null && current.active && kotlin.math.abs(current.multiplier - finalMultiplier) > 0.01) {
-                _preCrashAlert.postValue(PreCrashAlertState(true, roundId, finalMultiplier, "CRITICAL", "FLEW_AWAY_EXACT"))
+                _preCrashAlert.postValue(PreCrashAlertState(true, roundId, finalMultiplier, "FINAL", "FLEW_AWAY_EXACT"))
             }
         }
 

@@ -25,23 +25,22 @@ class LiveTickCadenceAnalyzer {
     // Calculated rolling average tick interval (seeded with 120ms typical Spribe Aviator cadence)
     private var avgTickInterval: Long = 120L
 
-    // Minimum ticks needed before activating detection (calibrates within ~350ms of takeoff)
-    private val minTicksForDetection: Int = 3
+    // Minimum ticks needed before activating detection (4 ticks to establish steady rhythm)
+    private val minTicksForDetection: Int = 4
 
-    // Minimum multiplier before freeze detection is active (avoids launch jitter at 1.00-1.05)
-    var minMultiplierForDetection: Double = 1.06
+    // Minimum multiplier before freeze detection is active (avoids early takeoff setup)
+    var minMultiplierForDetection: Double = 1.15
 
-    // Adaptive threshold multiplier: 1.45x normal interval
-    // E.g., if ticks come every 120ms, fires at 175ms gap (60ms before expected crash packet)
-    var freezeThresholdMultiplier: Double = 1.45
+    // Adaptive threshold multiplier: 2.3x normal interval
+    var freezeThresholdMultiplier: Double = 2.3
 
-    // Absolute minimum silence duration in ms to avoid false alarms on fast networks
-    var absoluteMinGapMs: Long = 175L
+    // Absolute minimum silence duration in ms to avoid false alarms from mobile network jitter (300ms)
+    var absoluteMinGapMs: Long = 300L
 
     // Max allowable gap: if >2500ms, round has stalled or disconnected, not pre-crash
     var absoluteMaxGapMs: Long = 2500L
 
-    // Alert state for current round
+    // Alert state for current round: STRICT SINGLE ALERT PER ROUND
     @Volatile
     private var alertFiredThisRound: Boolean = false
     private var currentRoundId: String = ""
@@ -79,12 +78,7 @@ class LiveTickCadenceAnalyzer {
         if (tickTimestamps.size > 30) {
             tickTimestamps.removeAt(0)
         }
-
-        // If an alert had fired due to temporary packet jitter, receiving a new tick means
-        // flight resumed — re-arm so we can catch the real freeze later!
-        if (alertFiredThisRound) {
-            alertFiredThisRound = false
-        }
+        // STRICT: Do NOT reset alertFiredThisRound here. Once fired, it remains fired for the round!
     }
 
     /**
@@ -107,7 +101,7 @@ class LiveTickCadenceAnalyzer {
     }
 
     fun resetAlertFired() {
-        alertFiredThisRound = false
+        // Only allow reset via onNewRound
     }
 
     /**
