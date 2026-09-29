@@ -111,14 +111,18 @@ class ProtocolDiscoveryEngineTest {
     fun testInstantPreCrashAlertTriggering() {
         var alertTriggered = false
         var alertMult = 0.0
+        var alertReason = ""
 
         val listener = object : com.example.aviatorsignallab.protocol.StateChangeListener {
             override fun onStateChanged(previousState: GameState, newState: GameState, currentRoundId: String, multiplier: Double) {}
             override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {}
             override fun onRoundStarted(roundId: String, startTimestamp: Long) {}
             override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
-                alertTriggered = true
-                alertMult = currentMultiplier
+                if (!alertTriggered) {
+                    alertTriggered = true
+                    alertMult = currentMultiplier
+                    alertReason = reason
+                }
             }
         }
 
@@ -134,10 +138,43 @@ class ProtocolDiscoveryEngineTest {
 
         assertEquals(false, alertTriggered)
 
-        // 3. Exact crash packet arrives -> immediate crash signal!
+        // 3. Exact crash packet arrives -> FAST pre-check fires BEFORE GSON parsing
         engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":3,"mul":"1.45"}""", t0 + 2500L)
 
         assertEquals(true, alertTriggered)
         assertEquals(1.45, alertMult, 0.001)
+        // The first alert should be from the fast pre-check (FLEW_AWAY_SIGNAL)
+        assertEquals("FLEW_AWAY_SIGNAL", alertReason)
+    }
+
+    @Test
+    fun testFastPathDoesNotDoubleFire() {
+        var alertCount = 0
+
+        val listener = object : com.example.aviatorsignallab.protocol.StateChangeListener {
+            override fun onStateChanged(previousState: GameState, newState: GameState, currentRoundId: String, multiplier: Double) {}
+            override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {}
+            override fun onRoundStarted(roundId: String, startTimestamp: Long) {}
+            override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
+                alertCount++
+            }
+        }
+
+        val engine = ProtocolDiscoveryEngine(listener)
+
+        val t0 = 10000L
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":1,"rbd":"30001","ttl":5}""", t0)
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":2,"mul":"1.00"}""", t0 + 1000L)
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":85,"mul":"2.50"}""", t0 + 3000L)
+
+        // Crash packet — fast pre-check fires once, then detectCrashSignal may fire again
+        // but the engine's isPreCrashAlertFiredForRound guard should prevent the second from
+        // the pattern/stream-freeze path (only crash transition fires a separate FLEW_AWAY_EXACT)
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":3,"mul":"2.50"}""", t0 + 3500L)
+
+        // Fast pre-check fires FLEW_AWAY_SIGNAL (1), then detectCrashSignal fires FLEW_AWAY_SIGNAL (blocked by guard),
+        // then transitionToCrash fires FLEW_AWAY_EXACT (2) + onRoundCrashDetected
+        // So total should be 2: one from fast pre-check, one from transitionToCrash
+        assertEquals(2, alertCount)
     }
 }

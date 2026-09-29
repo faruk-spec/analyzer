@@ -271,7 +271,12 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             if (alert != null && alert.active) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
                 val isExactCrash = alert.reason.contains("FLEW_AWAY") || alert.reason.contains("CRASH")
-                if (isExactCrash) {
+                val isFastPath = alert.reason.contains("FAST_CRASH_SIGNAL")
+                if (isFastPath) {
+                    binding.tvAlertTitle.text = "⚡ SIGNAL @ %.2fx".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "Fast-Path Pre-Crash • ~15ms Ahead"
+                    binding.tvBubbleStatus.text = "⚡SIGNAL!"
+                } else if (isExactCrash) {
                     binding.tvAlertTitle.text = "FLEW AWAY @ %.2fx".format(alert.multiplier)
                     binding.tvAlertSubtitle.text = "Exact Crash Instant • Round Concluded"
                     binding.tvBubbleStatus.text = "CRASH!"

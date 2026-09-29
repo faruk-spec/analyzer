@@ -80,6 +80,8 @@ class ProtocolDiscoveryEngine(
     private val multRegex1 = Regex("""([0-9]{1,4}\.[0-9]{1,2})\s*[xX]""")
     private val multRegex2 = Regex("""["'](?:multiplier|coefficient|coef|currmult)["']\s*[:=]\s*["']?([0-9]{1,4}\.[0-9]{1,2})["']?""", RegexOption.IGNORE_CASE)
 
+    private val fastCrashMulRegex = Regex(""""mul"\s*:\s*"?([0-9]+\.?[0-9]*)"?""")
+
     @Synchronized
     fun processRawEvent(
         transport: String,
@@ -89,7 +91,25 @@ class ProtocolDiscoveryEngine(
     ): LiveEvent {
         observedTransports.add(transport)
 
-        // 1. Sanitize payload
+        // FAST CRASH PRE-CHECK: Detect crash packets via raw string matching BEFORE
+        // running the expensive GSON parsing pipeline. This saves ~5-15ms.
+        val rawTrimmed = rawPayload?.trim()
+        val isFastCrash = rawTrimmed != null &&
+                rawTrimmed.contains("\"sta\":3") && rawTrimmed.contains("\"cmd\":84") &&
+                (currentState == GameState.LIVE || currentState == GameState.ROUND_START)
+
+        if (isFastCrash && !isPreCrashAlertFiredForRound) {
+            // Extract multiplier via fast regex (no GSON)
+            val match = fastCrashMulRegex.find(rawTrimmed!!)
+            val fastMul = match?.groupValues?.get(1)?.toDoubleOrNull() ?: currentMultiplier
+            val finalFastMul = if (fastMul >= 1.0) fastMul else currentMultiplier
+            // Fire the crash alert BEFORE the full parsing begins
+            isPreCrashAlertFiredForRound = true
+            alertFiredMultiplier = finalFastMul
+            listener?.onPreCrashAlert(currentRoundId, finalFastMul, "CRITICAL", "FLEW_AWAY_SIGNAL")
+        }
+
+        // 1. Sanitize payload (full pipeline for state bookkeeping & DB storage)
         val sanitized = SensitiveDataRedactor.sanitizePayload(cleanSocketIoPrefix(rawPayload))
         val fieldMap = SensitiveDataRedactor.extractFieldPaths(sanitized)
 

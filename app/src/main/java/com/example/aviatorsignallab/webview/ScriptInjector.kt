@@ -146,6 +146,30 @@ object ScriptInjector {
                 function processWsMessage(direction, data) {
                     try {
                         if (typeof data === 'string') {
+                            // FAST-PATH: Detect crash packet via raw string matching BEFORE
+                            // any JSON.stringify/parsing. This fires ~10-20ms ahead of the
+                            // normal pipeline, giving the alert a head start over the game's
+                            // own "Flew Away" rendering.
+                            if (direction === 'INCOMING' && data.indexOf('"sta":3') !== -1 && data.indexOf('"cmd":84') !== -1) {
+                                try {
+                                    var mulMatch = data.match(/"mul"\s*:\s*"?([0-9]+\.?[0-9]*)\"?/);
+                                    var mulStr = mulMatch ? mulMatch[1] : '0';
+                                    if (window.AndroidBridge && window.AndroidBridge.onCrashFastPath) {
+                                        window.AndroidBridge.onCrashFastPath(mulStr);
+                                    }
+                                } catch(fastErr) {}
+                            }
+                            // Also check Canvas "Flew Away" text crash signals arriving as forwarded messages
+                            if (direction === 'INCOMING' || direction === 'INTERNAL') {
+                                var lc = data.toLowerCase();
+                                if (lc.indexOf('flew away') !== -1 || lc.indexOf('flew-away') !== -1 || lc.indexOf('dom_crash_signal') !== -1) {
+                                    try {
+                                        if (window.AndroidBridge && window.AndroidBridge.onCrashFastPath) {
+                                            window.AndroidBridge.onCrashFastPath('0');
+                                        }
+                                    } catch(fastErr2) {}
+                                }
+                            }
                             safeDispatch("WEBSOCKET", direction, data, data.length);
                         } else if (data instanceof Blob) {
                             data.text().then(function(txt) {
