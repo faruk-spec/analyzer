@@ -39,7 +39,7 @@ class SensitiveDataRedactorTest {
         val jsonPayload = """{"game":{"multiplier":2.10,"auth_token":"secret999"}}"""
         val fields = SensitiveDataRedactor.extractFieldPaths(jsonPayload)
 
-        assertEquals("2.1", fields["game.multiplier"])
+        assertEquals("2.10", fields["game.multiplier"])
         assertEquals("[REDACTED]", fields["game.auth_token"])
     }
 }

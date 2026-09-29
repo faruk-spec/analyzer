@@ -79,7 +79,6 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.databaseEnabled = true
         settings.mediaPlaybackRequiresUserGesture = false
         settings.allowFileAccess = false
         settings.allowContentAccess = true
