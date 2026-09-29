@@ -12,6 +12,7 @@ local.properties
 *.aab
 *.jks
 *.keystore
+!app/keystore/release.jks
 release-keystore.jks
 app/build/
 build/

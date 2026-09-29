@@ -71,7 +71,7 @@ jobs:
             
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add app/keystore/release.jks
+            git add -f app/keystore/release.jks
             git commit -m "Add permanent persistent release keystore [skip ci]" || true
             git push origin HEAD:${{ github.ref_name }} || true
           fi
