@@ -1211,15 +1211,15 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
             val tvPeriod = TextView(this).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f)
                 text = shortPeriod
-                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
                 textSize = 11f
                 typeface = android.graphics.Typeface.MONOSPACE
             }
 
             val ballColor = when (item.color.uppercase()) {
-                "RED", "RED_VIOLET" -> ContextCompat.getColor(context, R.color.wingo_red)
-                "GREEN", "GREEN_VIOLET" -> ContextCompat.getColor(context, R.color.wingo_green)
-                else -> ContextCompat.getColor(context, R.color.wingo_violet)
+                "RED", "RED_VIOLET" -> ContextCompat.getColor(this@MainActivity, R.color.wingo_red)
+                "GREEN", "GREEN_VIOLET" -> ContextCompat.getColor(this@MainActivity, R.color.wingo_green)
+                else -> ContextCompat.getColor(this@MainActivity, R.color.wingo_violet)
             }
 
             val tvBall = TextView(this).apply {
@@ -1233,7 +1233,7 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
             val tvSize = TextView(this).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 0.8f)
                 text = item.size
-                setTextColor(if (item.size == "BIG") ContextCompat.getColor(context, R.color.wingo_big) else ContextCompat.getColor(context, R.color.wingo_small))
+                setTextColor(if (item.size == "BIG") ContextCompat.getColor(this@MainActivity, R.color.wingo_big) else ContextCompat.getColor(this@MainActivity, R.color.wingo_small))
                 textSize = 11f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
             }
