@@ -82,9 +82,9 @@ jobs:
       - name: Build Release APK
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'aviatorsignallab2026' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'aviatorlab' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'aviatorsignallab2026' }}
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Upload Debug APK Artifact

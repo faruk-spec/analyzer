@@ -27,18 +27,22 @@ android {
     signingConfigs {
         create("release") {
             val persistentKeystore = file("keystore/release.jks")
-            val keystoreBase64 = System.getenv("KEYSTORE_BASE64")
-            val keystoreFileEnv = System.getenv("KEYSTORE_FILE")
-            val storePass = System.getenv("KEYSTORE_PASSWORD") ?: System.getenv("KEY_STORE_PASSWORD") ?: "aviatorsignallab2026"
-            val keyAl = System.getenv("KEY_ALIAS") ?: "aviatorlab"
-            val keyPass = System.getenv("KEY_PASSWORD") ?: "aviatorsignallab2026"
+            val keystoreBase64 = System.getenv("KEYSTORE_BASE64")?.takeUnless { it.isBlank() }
+            val keystoreFileEnv = System.getenv("KEYSTORE_FILE")?.takeUnless { it.isBlank() }
+            val storePass = System.getenv("KEYSTORE_PASSWORD")?.takeUnless { it.isBlank() }
+                ?: System.getenv("KEY_STORE_PASSWORD")?.takeUnless { it.isBlank() }
+                ?: "aviatorsignallab2026"
+            val keyAl = System.getenv("KEY_ALIAS")?.takeUnless { it.isBlank() }
+                ?: "aviatorlab"
+            val keyPass = System.getenv("KEY_PASSWORD")?.takeUnless { it.isBlank() }
+                ?: "aviatorsignallab2026"
 
             if (persistentKeystore.exists()) {
                 storeFile = persistentKeystore
                 storePassword = storePass
                 keyAlias = keyAl
                 keyPassword = keyPass
-            } else if (!keystoreBase64.isNullOrBlank() && !storePass.isNullOrBlank() && !keyAl.isNullOrBlank() && !keyPass.isNullOrBlank()) {
+            } else if (!keystoreBase64.isNullOrBlank()) {
                 val decodedKeystore = File(layout.buildDirectory.asFile.get(), "release-keystore.jks")
                 decodedKeystore.parentFile?.mkdirs()
                 decodedKeystore.writeBytes(Base64.getDecoder().decode(keystoreBase64))
