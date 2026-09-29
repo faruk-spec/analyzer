@@ -3,10 +3,9 @@ package com.example.aviatorsignallab.webview
 object ScriptInjector {
 
     /**
-     * Enhanced stealth client-side telemetry script.
-     * Hooks WebSocket, Fetch, XMLHttpRequest, EventSource, postMessage, and DOM.
-     * Completely stealthy: preserves native prototypes, WebSocket static constants,
-     * masks toString() as native code, and avoids strict-mode errors.
+     * Stealth client-side telemetry script.
+     * Hooks WebSocket (JSON, Blobs, ArrayBuffers), Canvas 2D fillText, Fetch, XHR, and DOM.
+     * Extracts multipliers, round IDs, and crash signals in real-time across all frames.
      */
     val INJECTION_SCRIPT: String = """
         (function() {
@@ -27,8 +26,9 @@ object ScriptInjector {
 
                     if (window.AndroidBridge && window.AndroidBridge.onNetworkEvent) {
                         window.AndroidBridge.onNetworkEvent(transport, direction, strPayload || '', payloadSize);
-                    } else if (window.top && window.top !== window) {
-                        // Forward from cross-origin iframe to top window
+                    }
+                    // Also forward to parent/top window for cross-origin iframes
+                    if (window.top && window.top !== window) {
                         window.top.postMessage({
                             __aviatorLabEvent: true,
                             transport: transport,
@@ -44,7 +44,8 @@ object ScriptInjector {
                 try {
                     if (window.AndroidBridge && window.AndroidBridge.onDiagnostics) {
                         window.AndroidBridge.onDiagnostics(msg);
-                    } else if (window.top && window.top !== window) {
+                    }
+                    if (window.top && window.top !== window) {
                         window.top.postMessage({ __aviatorLabDiag: true, msg: msg }, '*');
                     }
                 } catch(e) {}
@@ -61,12 +62,35 @@ object ScriptInjector {
                 } catch(e) {}
             });
 
-            // 1. Stealth Hook for WebSocket
-            // CRITICAL: Must maintain CONNECTING, OPEN, CLOSING, CLOSED static properties
-            // and native prototype chain so Socket.IO / Spribe doesn't abort with 'failed server connection'
+            // 1. Stealth Hook for WebSocket (Decodes Text, Blobs, and ArrayBuffers)
             if (window.WebSocket && !window.__aviatorWsHooked) {
                 window.__aviatorWsHooked = true;
                 var NativeWebSocket = window.WebSocket;
+
+                function processWsMessage(direction, data) {
+                    try {
+                        if (typeof data === 'string') {
+                            safeDispatch("WEBSOCKET", direction, data, data.length);
+                        } else if (data instanceof Blob) {
+                            data.text().then(function(txt) {
+                                safeDispatch("WEBSOCKET", direction, txt, txt.length);
+                            }).catch(function() {
+                                var s = data.size || 0;
+                                safeDispatch("WEBSOCKET", direction, "[BLOB " + s + " bytes]", s);
+                            });
+                        } else if (data instanceof ArrayBuffer) {
+                            try {
+                                var txt = new TextDecoder("utf-8").decode(new Uint8Array(data));
+                                safeDispatch("WEBSOCKET", direction, txt, txt.length);
+                            } catch(e) {
+                                var s = data.byteLength || 0;
+                                safeDispatch("WEBSOCKET", direction, "[ARRAYBUFFER " + s + " bytes]", s);
+                            }
+                        } else {
+                            safeDispatch("WEBSOCKET", direction, String(data), 0);
+                        }
+                    } catch(e) {}
+                }
 
                 function InstrumentedWebSocket(url, protocols) {
                     var ws;
@@ -81,28 +105,18 @@ object ScriptInjector {
 
                         var origSend = ws.send;
                         ws.send = function(data) {
-                            try {
-                                var size = (data && data.length) ? data.length : ((data && data.byteLength) ? data.byteLength : 0);
-                                var preview = typeof data === 'string' ? data : "[BINARY_OUT " + size + " bytes]";
-                                safeDispatch("WEBSOCKET", "OUTGOING", preview, size);
-                            } catch(e) {}
+                            processWsMessage("OUTGOING", data);
                             return origSend.apply(this, arguments);
                         };
 
                         ws.addEventListener('message', function(evt) {
-                            try {
-                                var data = evt.data;
-                                var size = (data && data.length) ? data.length : ((data && data.byteLength) ? data.byteLength : 0);
-                                var preview = typeof data === 'string' ? data : "[BINARY_IN " + size + " bytes]";
-                                safeDispatch("WEBSOCKET", "INCOMING", preview, size);
-                            } catch(e) {}
+                            processWsMessage("INCOMING", evt.data);
                         }, false);
                     } catch(e) {}
 
                     return ws;
                 }
 
-                // Preserve native prototype & static readiness constants
                 InstrumentedWebSocket.CONNECTING = 0;
                 InstrumentedWebSocket.OPEN = 1;
                 InstrumentedWebSocket.CLOSING = 2;
@@ -117,7 +131,48 @@ object ScriptInjector {
                 window.WebSocket = InstrumentedWebSocket;
             }
 
-            // 2. Stealth Hook for Fetch
+            // 2. Canvas 2D Real-Time Multiplier & Crash Interceptor (Aviator plane renderer)
+            if (window.CanvasRenderingContext2D && !window.__aviatorCanvasHooked) {
+                window.__aviatorCanvasHooked = true;
+                var origFillText = CanvasRenderingContext2D.prototype.fillText;
+                var lastCanvasMult = "";
+                var canvasMultRegex = /([0-9]{1,4}\.[0-9]{1,2})\s*[xX]?/;
+
+                CanvasRenderingContext2D.prototype.fillText = function(text, x, y, maxWidth) {
+                    try {
+                        if (typeof text === 'string' && text.length > 0 && text.length < 35) {
+                            var trimmed = text.trim();
+                            var upper = trimmed.toUpperCase();
+                            if (upper.indexOf("FLEW AWAY") !== -1 || upper.indexOf("CRASH") !== -1 || upper.indexOf("FLEW-AWAY") !== -1) {
+                                if (lastCanvasMult !== "CRASH") {
+                                    lastCanvasMult = "CRASH";
+                                    safeDispatch("DOM", "INTERNAL", JSON.stringify({
+                                        type: "DOM_CRASH_SIGNAL",
+                                        status: "crash",
+                                        rawText: trimmed
+                                    }), trimmed.length);
+                                }
+                            } else {
+                                var match = canvasMultRegex.exec(trimmed);
+                                if (match && match[1]) {
+                                    var num = parseFloat(match[1]);
+                                    if (num >= 1.0 && num <= 100000.0 && match[1] !== lastCanvasMult) {
+                                        lastCanvasMult = match[1];
+                                        safeDispatch("DOM", "INTERNAL", JSON.stringify({
+                                            type: "DOM_MULTIPLIER_UPDATE",
+                                            multiplier: match[1],
+                                            rawText: trimmed
+                                        }), trimmed.length);
+                                    }
+                                }
+                            }
+                        }
+                    } catch(e) {}
+                    return origFillText.apply(this, arguments);
+                };
+            }
+
+            // 3. Stealth Hook for Fetch
             if (window.fetch && !window.__aviatorFetchHooked) {
                 window.__aviatorFetchHooked = true;
                 var origFetch = window.fetch;
@@ -154,7 +209,7 @@ object ScriptInjector {
                 } catch(e) {}
             }
 
-            // 3. Stealth Hook for XMLHttpRequest
+            // 4. Stealth Hook for XMLHttpRequest
             if (window.XMLHttpRequest && !window.__aviatorXhrHooked) {
                 window.__aviatorXhrHooked = true;
                 var OrigXHR = window.XMLHttpRequest;
@@ -193,50 +248,58 @@ object ScriptInjector {
                 };
             }
 
-            // 4. Hook postMessage communication
-            window.addEventListener('message', function(event) {
-                try {
-                    if (event.data && !event.data.__aviatorLabEvent && !event.data.__aviatorLabDiag) {
-                        var str = typeof event.data === 'string' ? event.data : JSON.stringify(event.data);
-                        if (str && str.length > 0) {
-                            safeDispatch("POST_MESSAGE", "INCOMING", str, str.length);
-                        }
-                    }
-                } catch(e) {}
-            });
-
-            // 5. Visual Multiplier & State Scanner (Runs in top frame and all iframes)
-            var lastMultiplierSeen = "";
-            var multRegex = /([0-9]{1,4}\.[0-9]{1,2})\s*[xX]/;
+            // 5. Visual Multiplier, Round ID & State Scanner
+            var lastDomMultiplier = "";
+            var lastDomRoundId = "";
+            var domMultRegex = /([0-9]{1,4}\.[0-9]{1,2})\s*[xX]?/;
+            var domRoundRegex = /(?:round|issue|#|game|id)\s*[:#]?\s*([0-9]{5,15})/i;
 
             setInterval(function() {
                 try {
                     var doc = document;
-                    var els = doc.querySelectorAll('div, span, p, h1, h2, h3, [class*="stage"], [class*="crash"], [class*="payout"], [class*="multiplier"], [class*="odds"], [class*="flew"]');
+                    var els = doc.querySelectorAll('div, span, p, h1, h2, h3, text, b, strong, em, [class*="stage"], [class*="crash"], [class*="payout"], [class*="multiplier"], [class*="odds"], [class*="flew"], [class*="bubble"]');
                     for (var i = 0; i < els.length; i++) {
                         var text = els[i].innerText || els[i].textContent;
                         if (!text || text.length > 40) continue;
 
-                        var match = multRegex.exec(text);
-                        if (match && match[1] !== lastMultiplierSeen) {
-                            lastMultiplierSeen = match[1];
+                        var trimmed = text.trim();
+
+                        // Scan for Round ID
+                        var rMatch = domRoundRegex.exec(trimmed);
+                        if (rMatch && rMatch[1] && rMatch[1] !== lastDomRoundId) {
+                            lastDomRoundId = rMatch[1];
                             safeDispatch("DOM", "INTERNAL", JSON.stringify({
-                                type: "DOM_MULTIPLIER_UPDATE",
-                                multiplier: match[1],
-                                rawText: text.trim()
-                            }), text.length);
-                            break;
+                                type: "DOM_ROUND_ID_UPDATE",
+                                round_id: rMatch[1],
+                                rawText: trimmed
+                            }), trimmed.length);
                         }
 
-                        var lower = text.toLowerCase();
+                        // Scan for Multiplier
+                        var mMatch = domMultRegex.exec(trimmed);
+                        if (mMatch && mMatch[1]) {
+                            var n = parseFloat(mMatch[1]);
+                            if (n >= 1.0 && n <= 100000.0 && mMatch[1] !== lastDomMultiplier) {
+                                lastDomMultiplier = mMatch[1];
+                                safeDispatch("DOM", "INTERNAL", JSON.stringify({
+                                    type: "DOM_MULTIPLIER_UPDATE",
+                                    multiplier: mMatch[1],
+                                    rawText: trimmed
+                                }), trimmed.length);
+                                break;
+                            }
+                        }
+
+                        // Scan for Crash keyword
+                        var lower = trimmed.toLowerCase();
                         if (lower.indexOf("flew away") !== -1 || lower.indexOf("crashed") !== -1 || lower.indexOf("flew-away") !== -1) {
-                            if (lastMultiplierSeen !== "CRASH") {
-                                lastMultiplierSeen = "CRASH";
+                            if (lastDomMultiplier !== "CRASH") {
+                                lastDomMultiplier = "CRASH";
                                 safeDispatch("DOM", "INTERNAL", JSON.stringify({
                                     type: "DOM_CRASH_SIGNAL",
                                     status: "crash",
-                                    rawText: text.trim()
-                                }), text.length);
+                                    rawText: trimmed
+                                }), trimmed.length);
                                 break;
                             }
                         }

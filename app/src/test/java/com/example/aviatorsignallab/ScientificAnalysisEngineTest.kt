@@ -65,6 +65,12 @@ class ScientificAnalysisEngineTest {
         // 3. Reset back to 1.00x -> Crash of previous round and start of next!
         engine.processRawEvent("DOM", "INTERNAL", """{"text":"1.00x"}""", 5000L)
         assertEquals(com.example.aviatorsignallab.protocol.GameState.LIVE, engine.currentState)
+
+        // 4. Nested WebSocket payload with custom round ID
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"data":{"multiplier":3.15,"round_id":"884920"}}""", 7000L)
+        assertEquals(com.example.aviatorsignallab.protocol.GameState.LIVE, engine.currentState)
+        assertEquals(3.15, engine.currentMultiplier, 0.01)
+        assertEquals("884920", engine.currentRoundId)
     }
 
     private fun createEvent(timestamp: Long, relToCrash: Long, isPost: Boolean = false): LiveEvent {

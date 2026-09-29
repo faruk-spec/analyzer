@@ -56,6 +56,13 @@ class ProtocolDiscoveryEngine(
         val isCrashSignal = detectCrashSignal(sanitized, fieldMap)
 
         // 3. Robust State Transitions
+        if (extractedRoundId != null && extractedRoundId != currentRoundId && !extractedRoundId.startsWith("rnd_")) {
+            if (currentState == GameState.LIVE) {
+                transitionToCrash(timestamp, currentMultiplier)
+            }
+            transitionToStart(extractedRoundId, timestamp)
+        }
+
         if (extractedMultiplier != null && extractedMultiplier >= 1.0) {
             handleMultiplierUpdate(extractedMultiplier, extractedRoundId, timestamp)
         } else if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
@@ -113,6 +120,8 @@ class ProtocolDiscoveryEngine(
                 currentMultiplier = newMultiplier
                 if (newMultiplier > 1.0) {
                     transitionToLive()
+                } else {
+                    listener?.onStateChanged(currentState, currentState, currentRoundId, currentMultiplier)
                 }
             }
             GameState.LIVE -> {
@@ -129,6 +138,7 @@ class ProtocolDiscoveryEngine(
                     transitionToLive()
                 } else {
                     currentMultiplier = newMultiplier
+                    listener?.onStateChanged(currentState, currentState, currentRoundId, currentMultiplier)
                 }
             }
             GameState.CRASH, GameState.ROUND_COMPLETE, GameState.NEXT_ROUND -> {
@@ -234,9 +244,10 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun discoverMultiplier(sanitized: String, fields: Map<String, String>): Double? {
-        // Direct field checking
-        for (key in listOf("multiplier", "rate", "coefficient", "odds", "x", "val", "v", "text", "rawText")) {
-            fields[key]?.let { v ->
+        // 1. Direct field checking across all field paths (nested and top-level)
+        for ((path, v) in fields) {
+            val key = path.substringAfterLast(".").substringBefore("[").lowercase()
+            if (key in listOf("multiplier", "rate", "coefficient", "odds", "coef", "mult", "currmult", "finalmult", "f", "m", "c", "x", "val", "v", "text", "rawtext")) {
                 val cleaned = v.replace("x", "", ignoreCase = true).replace("@", "").trim()
                 cleaned.toDoubleOrNull()?.let { num ->
                     if (num in 1.0..100000.0) return num
@@ -244,24 +255,36 @@ class ProtocolDiscoveryEngine(
             }
         }
 
-        // Regex pattern 1: "1.45x" or "10.50 X"
+        // 2. Regex pattern 1: "1.45x" or "10.50 X" or "x1.45"
         val m1 = multRegex1.find(sanitized)
         if (m1 != null) {
             m1.groupValues[1].toDoubleOrNull()?.let { return it }
         }
 
-        // Regex pattern 2: "multiplier": 1.45
+        // 3. Regex pattern 2: "multiplier": 1.45
         val m2 = multRegex2.find(sanitized)
         if (m2 != null) {
             m2.groupValues[1].toDoubleOrNull()?.let { return it }
+        }
+
+        // 4. Socket.io array payload like 42["multi", 1.45] or ["flying", 2.10]
+        val m3 = Regex("""\[\s*["'](?:multi|flying|tick|odds|rate|stage|point|score|crash)["']\s*,\s*([0-9]{1,4}(?:\.[0-9]{1,4})?)""", RegexOption.IGNORE_CASE).find(sanitized)
+        if (m3 != null) {
+            m3.groupValues[1].toDoubleOrNull()?.let { if (it in 1.0..100000.0) return it }
         }
 
         return null
     }
 
     private fun discoverRoundId(fields: Map<String, String>): String? {
-        for (key in listOf("round_id", "roundId", "rid", "game_id", "gameId", "round", "issueNumber")) {
-            fields[key]?.let { if (it.isNotBlank() && it != "[REDACTED]") return it }
+        for ((path, v) in fields) {
+            if (v.isBlank() || v == "[REDACTED]" || v == "null" || v == "0") continue
+            val key = path.substringAfterLast(".").substringBefore("[").lowercase()
+            if (key in listOf("round_id", "roundid", "rid", "game_id", "gameid", "round", "issuenumber", "issue", "stage_id", "id")) {
+                if (v.length in 3..40 && !v.equals("true", ignoreCase = true) && !v.equals("false", ignoreCase = true)) {
+                    return v
+                }
+            }
         }
         return null
     }
