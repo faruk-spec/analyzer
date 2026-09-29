@@ -33,7 +33,7 @@ class ProtocolDiscoveryEngine(
     private val pendingRoundEvents = mutableListOf<LiveEvent>()
 
     private val multRegex1 = Regex("""([0-9]{1,4}\.[0-9]{1,2})\s*[xX]""")
-    private val multRegex2 = Regex("""["']?(?:multiplier|coef|coefficient|odds|currmult)["']?\s*[:=]\s*["']?([0-9]{1,4}\.[0-9]{1,2})["']?""", RegexOption.IGNORE_CASE)
+    private val multRegex2 = Regex("""["'](?:multiplier|coefficient|coef|currmult)["']\s*[:=]\s*["']?([0-9]{1,4}\.[0-9]{1,2})["']?""", RegexOption.IGNORE_CASE)
 
     @Synchronized
     fun processRawEvent(
@@ -262,8 +262,11 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun discoverMultiplier(sanitized: String, fields: Map<String, String>): Double? {
-        // 0. Filter out false casino lobby percentage strings (e.g. RTP 97.22%)
-        if (sanitized.contains("RTP", ignoreCase = true) || sanitized.contains("%")) {
+        // 0. Filter out false casino lobby percentage strings (e.g. RTP 97.22%) and lobby catalogs
+        if (sanitized.contains("RTP", ignoreCase = true) ||
+            sanitized.contains("%") ||
+            sanitized.contains("platformList", ignoreCase = true) ||
+            sanitized.contains("winOdds", ignoreCase = true)) {
             return null
         }
 
