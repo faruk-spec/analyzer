@@ -27,6 +27,7 @@ import com.example.aviatorsignallab.update.UpdateManager
 import com.example.aviatorsignallab.webview.GameProtocolBridge
 import com.example.aviatorsignallab.webview.InstrumentedWebChromeClient
 import com.example.aviatorsignallab.webview.InstrumentedWebViewClient
+import com.example.aviatorsignallab.webview.ScriptInjector
 import com.example.aviatorsignallab.webview.WebChromeStatusListener
 import com.example.aviatorsignallab.webview.WebViewStatusListener
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -214,6 +215,10 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             showWebhookConfigDialog()
         }
 
+        sheet.btnSheetCheckUpdate.setOnClickListener {
+            checkForAppUpdates(showToastIfCurrent = true)
+        }
+
         sheet.btnExportRoundsCsv.setOnClickListener {
             exportCsvAndShare("ROUNDS")
         }
@@ -298,16 +303,69 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 }
                 is UpdateCheckResult.UpToDate -> {
                     if (showToastIfCurrent) {
-                        Toast.makeText(this@MainActivity, "App is up to date (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("App is Up to Date")
+                            .setMessage("Current Version: v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})\n\nNo newer version was found on update server.")
+                            .setPositiveButton("OK", null)
+                            .setNeutralButton("Settings") { _, _ ->
+                                showUpdateConfigDialog()
+                            }
+                            .show()
                     }
                 }
                 is UpdateCheckResult.Error -> {
                     if (showToastIfCurrent) {
-                        Toast.makeText(this@MainActivity, "Update check note: ${result.message}", Toast.LENGTH_LONG).show()
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("Update Check Notice")
+                            .setMessage(result.message)
+                            .setPositiveButton("OK", null)
+                            .setNeutralButton("Settings") { _, _ ->
+                                showUpdateConfigDialog()
+                            }
+                            .show()
                     }
                 }
             }
         }
+    }
+
+    private fun showUpdateConfigDialog() {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_update_config)
+
+        val tvInstalled = dialog.findViewById<TextView>(R.id.tvCurrentInstalledVersion)
+        val etUrl = dialog.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etUpdateUrl)
+        val etToken = dialog.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etGitHubToken)
+        val btnReset = dialog.findViewById<Button>(R.id.btnResetDefaultUpdate)
+        val btnCancel = dialog.findViewById<Button>(R.id.btnCancelUpdateConfig)
+        val btnSave = dialog.findViewById<Button>(R.id.btnSaveUpdateConfig)
+
+        tvInstalled.text = "Installed: v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+        etUrl.setText(updateManager.getEffectiveUpdateUrl())
+        etToken.setText(updateManager.getGitHubToken() ?: "")
+
+        btnReset.setOnClickListener {
+            updateManager.setCustomUpdateUrl(null)
+            updateManager.setGitHubToken(null)
+            etUrl.setText(updateManager.getEffectiveUpdateUrl())
+            etToken.setText("")
+            Toast.makeText(this, "Reset to default GitHub Releases URL", Toast.LENGTH_SHORT).show()
+        }
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        btnSave.setOnClickListener {
+            val url = etUrl.text?.toString()?.trim()
+            val token = etToken.text?.toString()?.trim()
+            updateManager.setCustomUpdateUrl(if (!url.isNullOrBlank()) url else null)
+            updateManager.setGitHubToken(if (!token.isNullOrBlank()) token else null)
+            Toast.makeText(this, "Update settings saved", Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+            checkForAppUpdates(showToastIfCurrent = true)
+        }
+
+        dialog.show()
     }
 
     private fun showUpdateDialog(metadata: ReleaseMetadata) {

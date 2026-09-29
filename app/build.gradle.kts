@@ -21,7 +21,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "TARGET_URL", "\"https://damansuperstar1.com/\"")
-        buildConfigField("String", "UPDATE_METADATA_URL", "\"https://api.github.com/repos/example/aviator-signal-lab/releases/latest\"")
+        buildConfigField("String", "UPDATE_METADATA_URL", "\"https://api.github.com/repos/faruk-spec/analyzer/releases/latest\"")
     }
 
     signingConfigs {

@@ -98,12 +98,18 @@ jobs:
 
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
 
+          # Dynamically extract versionCode and versionName from build.gradle.kts
+          VERSION_NAME=$(grep 'versionName = ' app/build.gradle.kts | head -n 1 | sed 's/.*versionName = "\(.*\)".*/\1/')
+          VERSION_CODE=$(grep 'versionCode = ' app/build.gradle.kts | head -n 1 | sed 's/.*versionCode = \([0-9]*\).*/\1/')
+          if [ -z "$VERSION_NAME" ]; then VERSION_NAME="${TAG_NAME#v}"; fi
+          if [ -z "$VERSION_CODE" ]; then VERSION_CODE="1"; fi
+
           # Generate release metadata JSON for in-app update checker
           cat <<EOF > release_assets/latest_release.json
           {
-            "versionCode": 1,
-            "versionName": "1.0.0",
-            "releaseNotes": "Aviator Signal Lab initial release. Real-time network observability, pre-crash window feature extraction (T-0.1s to T-5.0s), empirical significance testing, and leakage-proof offline analysis.",
+            "versionCode": $VERSION_CODE,
+            "versionName": "$VERSION_NAME",
+            "releaseNotes": "Aviator Signal Lab $TAG_NAME. Passive client-side network observability, pre-crash window feature extraction (T-0.1s to T-5.0s), empirical significance testing, and leakage-proof offline analysis.",
             "apkUrl": "https://github.com/${{ github.repository }}/releases/download/$TAG_NAME/AviatorSignalLab.apk",
             "publishedAt": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           }

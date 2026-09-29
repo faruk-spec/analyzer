@@ -288,6 +288,18 @@
                 app:strokeColor="@color/accent_cyan"
                 app:strokeWidth="1dp" />
 
+            <!-- Check Updates Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSheetCheckUpdate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="🔄 Check for App Updates"
+                android:textColor="@color/text_primary"
+                app:backgroundTint="@color/bg_card"
+                app:strokeColor="@color/bg_card_border"
+                app:strokeWidth="1dp" />
+
             <!-- Clear Database Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnClearData"
