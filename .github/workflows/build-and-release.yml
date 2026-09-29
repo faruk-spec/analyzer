@@ -17,12 +17,12 @@ on:
         description: 'Create GitHub Release with APK'
         required: true
         type: boolean
-        default: false
+        default: true
       release_tag:
-        description: 'Release tag (e.g. v1.0.0)'
+        description: 'Release tag (e.g. v1.0.3)'
         required: false
         type: string
-        default: 'v1.0.0'
+        default: 'v1.0.3'
 
 jobs:
   build:
@@ -34,6 +34,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -51,6 +53,28 @@ jobs:
 
       - name: Run Unit Tests
         run: ./gradlew test --stacktrace
+
+      - name: Ensure Persistent Signing Keystore
+        run: |
+          mkdir -p app/keystore
+          if [ ! -f app/keystore/release.jks ]; then
+            echo "Generating persistent keystore for seamless updates..."
+            keytool -genkeypair -v \
+              -keystore app/keystore/release.jks \
+              -alias aviatorlab \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "aviatorsignallab2026" \
+              -keypass "aviatorsignallab2026" \
+              -dname "CN=AviatorSignalLab, OU=Research, O=Lab, L=Lab, ST=Lab, C=US"
+            
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add app/keystore/release.jks
+            git commit -m "Add permanent persistent release keystore [skip ci]" || true
+            git push origin HEAD:${{ github.ref_name }} || true
+          fi
 
       - name: Build Debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
@@ -78,11 +102,11 @@ jobs:
           retention-days: 30
 
       - name: Prepare Release Assets
-        if: (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true')
+        if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true')
         id: release_prep
         run: |
           mkdir -p release_assets
-          # Find release apk or fallback to debug apk if signing wasn't configured
+          # Find release apk or fallback to debug apk
           if [ -f app/build/outputs/apk/release/app-release.apk ]; then
             cp app/build/outputs/apk/release/app-release.apk release_assets/AviatorSignalLab.apk
           elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
@@ -91,18 +115,19 @@ jobs:
             cp app/build/outputs/apk/debug/app-debug.apk release_assets/AviatorSignalLab.apk
           fi
 
-          TAG_NAME="${{ github.ref_name }}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION_NAME=$(grep 'versionName = ' app/build.gradle.kts | head -n 1 | sed 's/.*versionName = "\(.*\)".*/\1/')
+          VERSION_CODE=$(grep 'versionCode = ' app/build.gradle.kts | head -n 1 | sed 's/.*versionCode = \([0-9]*\).*/\1/')
+          if [ -z "$VERSION_NAME" ]; then VERSION_NAME="1.0.3"; fi
+          if [ -z "$VERSION_CODE" ]; then VERSION_CODE="4"; fi
+
+          TAG_NAME="v$VERSION_NAME"
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.release_tag }}" ]; then
             TAG_NAME="${{ github.event.inputs.release_tag }}"
           fi
 
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-
-          # Dynamically extract versionCode and versionName from build.gradle.kts
-          VERSION_NAME=$(grep 'versionName = ' app/build.gradle.kts | head -n 1 | sed 's/.*versionName = "\(.*\)".*/\1/')
-          VERSION_CODE=$(grep 'versionCode = ' app/build.gradle.kts | head -n 1 | sed 's/.*versionCode = \([0-9]*\).*/\1/')
-          if [ -z "$VERSION_NAME" ]; then VERSION_NAME="${TAG_NAME#v}"; fi
-          if [ -z "$VERSION_CODE" ]; then VERSION_CODE="1"; fi
 
           # Generate release metadata JSON for in-app update checker
           cat <<EOF > release_assets/latest_release.json
@@ -115,8 +140,8 @@ jobs:
           }
           EOF
 
-      - name: Create GitHub Release
-        if: (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true')
+      - name: Create or Update GitHub Release
+        if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_prep.outputs.tag_name }}

@@ -1,8 +1,12 @@
 package com.example.aviatorsignallab.export
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.example.aviatorsignallab.db.ResearchDatabase
 import com.google.gson.GsonBuilder
@@ -44,7 +48,7 @@ class ZipExportManager(private val context: Context) {
         // Generate manifest
         val manifest = mapOf(
             "app" to "Aviator Signal Lab",
-            "version" to "1.0.0",
+            "version" to "1.0.3",
             "exportedAt" to System.currentTimeMillis(),
             "totalRounds" to rounds.size,
             "totalEvents" to events.size,
@@ -75,6 +79,68 @@ class ZipExportManager(private val context: Context) {
         zipFile
     }
 
+    /**
+     * Automatically saves exported file to public Downloads/AviatorSignalLab directory.
+     */
+    fun saveToDownloads(file: File): Boolean {
+        return try {
+            val fileName = file.name
+            val mimeType = if (fileName.endsWith(".zip", ignoreCase = true)) "application/zip" else "text/csv"
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AviatorSignalLab")
+                }
+                val resolver = context.contentResolver
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { output ->
+                        file.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
+                    return true
+                }
+            }
+
+            // Legacy direct storage copy
+            val downloadsDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "AviatorSignalLab")
+            downloadsDir.mkdirs()
+            val destFile = File(downloadsDir, fileName)
+            file.copyTo(destFile, overwrite = true)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Opens the exported file with a compatible viewer (e.g. CSV reader, Excel, Sheets, ZIP extractor).
+     */
+    fun openExportFile(file: File) {
+        try {
+            val uri: Uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                file
+            )
+            val mimeType = if (file.name.endsWith(".zip", ignoreCase = true)) "application/zip" else "text/csv"
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooser = Intent.createChooser(viewIntent, "Open ${file.name} with...").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } catch (e: Exception) {
+            shareExportFile(file)
+        }
+    }
+
     fun shareExportFile(file: File) {
         val uri: Uri = FileProvider.getUriForFile(
             context,
@@ -83,13 +149,13 @@ class ZipExportManager(private val context: Context) {
         )
 
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = if (file.name.endsWith(".zip")) "application/zip" else "text/csv"
+            type = if (file.name.endsWith(".zip", ignoreCase = true)) "application/zip" else "text/csv"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
-        val chooser = Intent.createChooser(shareIntent, "Export Dataset").apply {
+        val chooser = Intent.createChooser(shareIntent, "Share Export File").apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(chooser)

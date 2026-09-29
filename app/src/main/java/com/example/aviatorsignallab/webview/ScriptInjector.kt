@@ -3,14 +3,22 @@ package com.example.aviatorsignallab.webview
 object ScriptInjector {
 
     /**
-     * Enhanced non-invasive client-side telemetry script.
+     * Enhanced stealth client-side telemetry script.
      * Hooks WebSocket, Fetch, XMLHttpRequest, EventSource, postMessage, and DOM.
-     * Supports child iframes, Socket.IO frames, and visual multiplier extraction.
+     * Completely stealthy: preserves native prototypes, WebSocket static constants,
+     * masks toString() as native code, and avoids strict-mode errors.
      */
     val INJECTION_SCRIPT: String = """
         (function() {
             if (window.__aviatorLabInstrumented) return;
             window.__aviatorLabInstrumented = true;
+
+            // 0. Stealth anti-detection: Hide automation indicators
+            try {
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: function() { return undefined; }
+                });
+            } catch(e) {}
 
             function safeDispatch(transport, direction, payload, size) {
                 try {
@@ -42,8 +50,6 @@ object ScriptInjector {
                 } catch(e) {}
             }
 
-            safeLog("Instrumenting client-side network hooks in: " + window.location.href);
-
             // Listener for cross-iframe forwarded events
             window.addEventListener('message', function(event) {
                 try {
@@ -55,79 +61,85 @@ object ScriptInjector {
                 } catch(e) {}
             });
 
-            // 1. Hook WebSocket (Constructor, send, addEventListener, and .onmessage property)
-            if (window.WebSocket) {
-                var OriginalWebSocket = window.WebSocket;
-                window.WebSocket = function(url, protocols) {
-                    var ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
-                    safeLog("WebSocket connected to: " + url);
-                    safeDispatch("WEBSOCKET", "INTERNAL", JSON.stringify({ event: "CONNECT", url: url }), 0);
+            // 1. Stealth Hook for WebSocket
+            // CRITICAL: Must maintain CONNECTING, OPEN, CLOSING, CLOSED static properties
+            // and native prototype chain so Socket.IO / Spribe doesn't abort with 'failed server connection'
+            if (window.WebSocket && !window.__aviatorWsHooked) {
+                window.__aviatorWsHooked = true;
+                var NativeWebSocket = window.WebSocket;
 
-                    // Hook send
-                    var origSend = ws.send;
-                    ws.send = function(data) {
-                        try {
-                            var size = (data && data.length) ? data.length : ((data && data.byteLength) ? data.byteLength : 0);
-                            var preview = typeof data === 'string' ? data : "[BINARY_OUT " + size + " bytes]";
-                            safeDispatch("WEBSOCKET", "OUTGOING", preview, size);
-                        } catch(e) {}
-                        return origSend.apply(this, arguments);
-                    };
-
-                    // Handler for incoming messages
-                    function handleIncoming(event) {
-                        try {
-                            var data = event.data;
-                            var size = (data && data.length) ? data.length : ((data && data.byteLength) ? data.byteLength : 0);
-                            var preview = typeof data === 'string' ? data : "[BINARY_IN " + size + " bytes]";
-                            safeDispatch("WEBSOCKET", "INCOMING", preview, size);
-                        } catch(e) {}
+                function InstrumentedWebSocket(url, protocols) {
+                    var ws;
+                    if (arguments.length > 1 && protocols !== undefined) {
+                        ws = new NativeWebSocket(url, protocols);
+                    } else {
+                        ws = new NativeWebSocket(url);
                     }
 
-                    ws.addEventListener('message', handleIncoming);
-
-                    // Intercept direct assignments like ws.onmessage = function(...)
-                    var internalOnMessage = null;
                     try {
-                        Object.defineProperty(ws, 'onmessage', {
-                            get: function() { return internalOnMessage; },
-                            set: function(handler) {
-                                internalOnMessage = function(evt) {
-                                    handleIncoming(evt);
-                                    if (typeof handler === 'function') {
-                                        handler.apply(this, arguments);
-                                    }
-                                };
-                            }
-                        });
+                        safeDispatch("WEBSOCKET", "INTERNAL", JSON.stringify({ event: "CONNECT", url: String(url) }), 0);
+
+                        var origSend = ws.send;
+                        ws.send = function(data) {
+                            try {
+                                var size = (data && data.length) ? data.length : ((data && data.byteLength) ? data.byteLength : 0);
+                                var preview = typeof data === 'string' ? data : "[BINARY_OUT " + size + " bytes]";
+                                safeDispatch("WEBSOCKET", "OUTGOING", preview, size);
+                            } catch(e) {}
+                            return origSend.apply(this, arguments);
+                        };
+
+                        ws.addEventListener('message', function(evt) {
+                            try {
+                                var data = evt.data;
+                                var size = (data && data.length) ? data.length : ((data && data.byteLength) ? data.byteLength : 0);
+                                var preview = typeof data === 'string' ? data : "[BINARY_IN " + size + " bytes]";
+                                safeDispatch("WEBSOCKET", "INCOMING", preview, size);
+                            } catch(e) {}
+                        }, false);
                     } catch(e) {}
 
                     return ws;
-                };
-                window.WebSocket.prototype = OriginalWebSocket.prototype;
+                }
+
+                // Preserve native prototype & static readiness constants
+                InstrumentedWebSocket.CONNECTING = 0;
+                InstrumentedWebSocket.OPEN = 1;
+                InstrumentedWebSocket.CLOSING = 2;
+                InstrumentedWebSocket.CLOSED = 3;
+                InstrumentedWebSocket.prototype = NativeWebSocket.prototype;
+
+                try {
+                    Object.defineProperty(InstrumentedWebSocket, 'name', { value: 'WebSocket' });
+                    InstrumentedWebSocket.toString = function() { return "function WebSocket() { [native code] }"; };
+                } catch(e) {}
+
+                window.WebSocket = InstrumentedWebSocket;
             }
 
-            // 2. Hook Fetch
-            if (window.fetch) {
+            // 2. Stealth Hook for Fetch
+            if (window.fetch && !window.__aviatorFetchHooked) {
+                window.__aviatorFetchHooked = true;
                 var origFetch = window.fetch;
                 window.fetch = function() {
                     var args = arguments;
-                    var url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : "");
-                    var options = args[1] || {};
-                    var method = options.method || "GET";
+                    try {
+                        var url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : "");
+                        var options = args[1] || {};
+                        var method = options.method || "GET";
 
-                    if (options.body) {
-                        var bodyStr = typeof options.body === 'string' ? options.body : "[BODY_DATA]";
-                        safeDispatch("FETCH", "OUTGOING", JSON.stringify({ url: url, method: method, body: bodyStr }), bodyStr.length);
-                    }
+                        if (options.body) {
+                            var bodyStr = typeof options.body === 'string' ? options.body : "[BODY_DATA]";
+                            safeDispatch("FETCH", "OUTGOING", JSON.stringify({ url: url, method: method, body: bodyStr }), bodyStr.length);
+                        }
+                    } catch(e) {}
 
                     return origFetch.apply(this, args).then(function(response) {
                         try {
                             var clone = response.clone();
                             clone.text().then(function(bodyText) {
                                 if (bodyText && bodyText.length > 0 && bodyText.length < 50000) {
-                                    // Capture game telemetry responses
-                                    if (bodyText.indexOf('multiplier') !== -1 || bodyText.indexOf('crash') !== -1 || bodyText.indexOf('round') !== -1 || url.indexOf('game') !== -1 || url.indexOf('aviator') !== -1) {
+                                    if (bodyText.indexOf('multiplier') !== -1 || bodyText.indexOf('crash') !== -1 || bodyText.indexOf('round') !== -1 || (url && url.indexOf('game') !== -1)) {
                                         safeDispatch("FETCH", "INCOMING", bodyText, bodyText.length);
                                     }
                                 }
@@ -136,37 +148,46 @@ object ScriptInjector {
                         return response;
                     });
                 };
+
+                try {
+                    window.fetch.toString = function() { return "function fetch() { [native code] }"; };
+                } catch(e) {}
             }
 
-            // 3. Hook XMLHttpRequest
-            if (window.XMLHttpRequest) {
+            // 3. Stealth Hook for XMLHttpRequest
+            if (window.XMLHttpRequest && !window.__aviatorXhrHooked) {
+                window.__aviatorXhrHooked = true;
                 var OrigXHR = window.XMLHttpRequest;
                 var origOpen = OrigXHR.prototype.open;
                 var origSend = OrigXHR.prototype.send;
 
                 OrigXHR.prototype.open = function(method, url) {
-                    this.__xhrUrl = url;
-                    this.__xhrMethod = method;
+                    try {
+                        this.__xhrUrl = url;
+                        this.__xhrMethod = method;
+                    } catch(e) {}
                     return origOpen.apply(this, arguments);
                 };
 
                 OrigXHR.prototype.send = function(body) {
                     var self = this;
-                    if (body) {
-                        var bodyStr = typeof body === 'string' ? body : "[XHR_BODY]";
-                        safeDispatch("XHR", "OUTGOING", JSON.stringify({ url: self.__xhrUrl, method: self.__xhrMethod, body: bodyStr }), bodyStr.length);
-                    }
+                    try {
+                        if (body) {
+                            var bodyStr = typeof body === 'string' ? body : "[XHR_BODY]";
+                            safeDispatch("XHR", "OUTGOING", JSON.stringify({ url: self.__xhrUrl, method: self.__xhrMethod, body: bodyStr }), bodyStr.length);
+                        }
 
-                    this.addEventListener('load', function() {
-                        try {
-                            var text = self.responseText;
-                            if (text && text.length > 0 && text.length < 50000) {
-                                if (text.indexOf('multiplier') !== -1 || text.indexOf('crash') !== -1 || text.indexOf('round') !== -1 || (self.__xhrUrl && self.__xhrUrl.indexOf('game') !== -1)) {
-                                    safeDispatch("XHR", "INCOMING", text, text.length);
+                        this.addEventListener('load', function() {
+                            try {
+                                var text = self.responseText;
+                                if (text && text.length > 0 && text.length < 50000) {
+                                    if (text.indexOf('multiplier') !== -1 || text.indexOf('crash') !== -1 || text.indexOf('round') !== -1 || (self.__xhrUrl && self.__xhrUrl.indexOf('game') !== -1)) {
+                                        safeDispatch("XHR", "INCOMING", text, text.length);
+                                    }
                                 }
-                            }
-                        } catch(e) {}
-                    });
+                            } catch(e) {}
+                        }, false);
+                    } catch(e) {}
 
                     return origSend.apply(this, arguments);
                 };
@@ -184,14 +205,13 @@ object ScriptInjector {
                 } catch(e) {}
             });
 
-            // 5. Universal Visual Multiplier & State Scanner (Runs in top frame and all iframes)
+            // 5. Visual Multiplier & State Scanner (Runs in top frame and all iframes)
             var lastMultiplierSeen = "";
             var multRegex = /([0-9]{1,4}\.[0-9]{1,2})\s*[xX]/;
 
             setInterval(function() {
                 try {
                     var doc = document;
-                    // Scan candidate elements
                     var els = doc.querySelectorAll('div, span, p, h1, h2, h3, [class*="stage"], [class*="crash"], [class*="payout"], [class*="multiplier"], [class*="odds"], [class*="flew"]');
                     for (var i = 0; i < els.length; i++) {
                         var text = els[i].innerText || els[i].textContent;
@@ -208,7 +228,6 @@ object ScriptInjector {
                             break;
                         }
 
-                        // Check for crash keywords on screen
                         var lower = text.toLowerCase();
                         if (lower.indexOf("flew away") !== -1 || lower.indexOf("crashed") !== -1 || lower.indexOf("flew-away") !== -1) {
                             if (lastMultiplierSeen !== "CRASH") {
@@ -224,24 +243,6 @@ object ScriptInjector {
                     }
                 } catch(e) {}
             }, 100);
-
-            // 6. Child iframe recursive injector (for same-origin or reachable iframes)
-            setInterval(function() {
-                try {
-                    var iframes = document.querySelectorAll('iframe');
-                    for (var j = 0; j < iframes.length; j++) {
-                        try {
-                            var win = iframes[j].contentWindow;
-                            if (win && !win.__aviatorLabInstrumented) {
-                                safeLog("Injecting into child iframe: " + (iframes[j].src || "inline"));
-                                win.eval("(" + arguments.callee.caller.toString() + ")()");
-                            }
-                        } catch(e) {
-                            // Cross-origin: Handled by WebViewCompat.addDocumentStartJavaScript
-                        }
-                    }
-                } catch(e) {}
-            }, 1000);
 
         })();
     """.trimIndent()

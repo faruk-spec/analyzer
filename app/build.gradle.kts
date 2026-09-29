@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.aviatorsignallab"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -26,13 +26,19 @@ android {
 
     signingConfigs {
         create("release") {
+            val persistentKeystore = file("keystore/release.jks")
             val keystoreBase64 = System.getenv("KEYSTORE_BASE64")
             val keystoreFileEnv = System.getenv("KEYSTORE_FILE")
-            val storePass = System.getenv("KEYSTORE_PASSWORD") ?: System.getenv("KEY_STORE_PASSWORD")
-            val keyAl = System.getenv("KEY_ALIAS")
-            val keyPass = System.getenv("KEY_PASSWORD")
+            val storePass = System.getenv("KEYSTORE_PASSWORD") ?: System.getenv("KEY_STORE_PASSWORD") ?: "aviatorsignallab2026"
+            val keyAl = System.getenv("KEY_ALIAS") ?: "aviatorlab"
+            val keyPass = System.getenv("KEY_PASSWORD") ?: "aviatorsignallab2026"
 
-            if (!keystoreBase64.isNullOrBlank() && !storePass.isNullOrBlank() && !keyAl.isNullOrBlank() && !keyPass.isNullOrBlank()) {
+            if (persistentKeystore.exists()) {
+                storeFile = persistentKeystore
+                storePassword = storePass
+                keyAlias = keyAl
+                keyPassword = keyPass
+            } else if (!keystoreBase64.isNullOrBlank() && !storePass.isNullOrBlank() && !keyAl.isNullOrBlank() && !keyPass.isNullOrBlank()) {
                 val decodedKeystore = File(layout.buildDirectory.asFile.get(), "release-keystore.jks")
                 decodedKeystore.parentFile?.mkdirs()
                 decodedKeystore.writeBytes(Base64.getDecoder().decode(keystoreBase64))
@@ -66,6 +72,10 @@ android {
         debug {
             isDebuggable = true
             applicationIdSuffix = ""
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
+                signingConfig = releaseSigning
+            }
         }
     }
 

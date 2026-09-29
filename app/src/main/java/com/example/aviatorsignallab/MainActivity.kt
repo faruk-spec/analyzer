@@ -90,8 +90,14 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         val webView = binding.webView
         val settings = webView.settings
 
+        // Enable third-party cookies for cross-origin game iframes (Spribe / Aviator servers)
+        val cookieManager = android.webkit.CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(webView, true)
+
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        settings.databaseEnabled = true
         settings.mediaPlaybackRequiresUserGesture = false
         settings.allowFileAccess = false
         settings.allowContentAccess = true
@@ -99,6 +105,12 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         settings.loadWithOverviewMode = true
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         settings.cacheMode = WebSettings.LOAD_DEFAULT
+        settings.setSupportMultipleWindows(true)
+        settings.javaScriptCanOpenWindowsAutomatically = true
+
+        // Mask WebView User-Agent: strip '; wv' and 'Version/4.0' to prevent anti-bot server connection blocks
+        val defaultUa = settings.userAgentString
+        settings.userAgentString = defaultUa.replace("; wv", "").replace("Version/4.0 ", "")
 
         webView.addJavascriptInterface(GameProtocolBridge(viewModel), "AndroidBridge")
         webView.webViewClient = InstrumentedWebViewClient(this)
@@ -270,12 +282,33 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         })
     }
 
+    private fun showExportSuccessDialog(file: java.io.File) {
+        val saved = viewModel.zipExportManager.saveToDownloads(file)
+        val msg = if (saved) {
+            "File successfully saved to phone storage:\nDownloads/AviatorSignalLab/${file.name}"
+        } else {
+            "File generated: ${file.name}"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Dataset Exported")
+            .setMessage(msg)
+            .setPositiveButton("Open File") { _, _ ->
+                viewModel.zipExportManager.openExportFile(file)
+            }
+            .setNeutralButton("Share") { _, _ ->
+                viewModel.zipExportManager.shareExportFile(file)
+            }
+            .setNegativeButton("Done", null)
+            .show()
+    }
+
     private fun exportCsvAndShare(type: String) {
         lifecycleScope.launch {
             try {
                 Toast.makeText(this@MainActivity, "Generating $type CSV...", Toast.LENGTH_SHORT).show()
                 val file = viewModel.exportSingleCsv(type)
-                viewModel.zipExportManager.shareExportFile(file)
+                showExportSuccessDialog(file)
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
@@ -287,7 +320,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             try {
                 Toast.makeText(this@MainActivity, "Packaging complete dataset into ZIP...", Toast.LENGTH_SHORT).show()
                 val zipFile = viewModel.zipExportManager.exportAllAsZip()
-                viewModel.zipExportManager.shareExportFile(zipFile)
+                showExportSuccessDialog(zipFile)
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
