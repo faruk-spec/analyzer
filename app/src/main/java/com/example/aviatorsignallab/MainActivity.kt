@@ -416,6 +416,14 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             checkForAppUpdates(showToastIfCurrent = true)
         }
 
+        sheet.btnSheetBetExposure.setOnClickListener {
+            showBetVolumeExposureDialog()
+        }
+
+        sheet.btnSheetProvablyFair.setOnClickListener {
+            showProvablyFairDialog()
+        }
+
         sheet.btnSheetReload.setOnClickListener {
             binding.webView.reload()
             Toast.makeText(this, "Reloading target page...", Toast.LENGTH_SHORT).show()
@@ -795,6 +803,103 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             .setNeutralButton("Change Target") { _, _ ->
                 showTargetMultiplierPicker()
             }
+            .show()
+    }
+
+    private fun showBetVolumeExposureDialog() {
+        val telem = viewModel.betTelemetry.value ?: com.example.aviatorsignallab.protocol.ServerReverseEngine.currentTelemetry
+        val mult = viewModel.currentMultiplier.value ?: 1.00
+
+        val sb = StringBuilder()
+        sb.append("📊 REAL-TIME CASINO EXPOSURE TELEMETRY\n")
+        sb.append("Current Round: ${telem.roundId}\n")
+        sb.append("Current Multiplier: ${"%.2f".format(mult)}x\n\n")
+
+        sb.append("💰 WAGER VOLUME BREAKDOWN:\n")
+        sb.append("• Total Wager Pool: $${"%.2f".format(telem.totalWagerPool)}\n")
+        sb.append("• Total Bets In Round: ${telem.totalBetsCount} bets\n")
+        sb.append("• Cashed Out to Players: $${"%.2f".format(telem.cashedOutAmount)}\n")
+        sb.append("• Money Remaining in Flight: $${"%.2f".format(telem.activeWagerRemaining)}\n\n")
+
+        sb.append("⚠️ CASINO NET MARGIN / PROFIT:\n")
+        val plSign = if (telem.casinoNetProfitLoss >= 0) "+$" else "-$"
+        sb.append("• Net Operator Margin: $plSign${"%.2f".format(kotlin.math.abs(telem.casinoNetProfitLoss))}\n")
+        sb.append("• Active Whales Threatening Pool: ${telem.whaleThreatCount} high-rollers\n\n")
+
+        if (telem.whaleBets.isNotEmpty()) {
+            sb.append("🐋 ACTIVE WHALE RADAR (Wagers > $500):\n")
+            for (w in telem.whaleBets.take(5)) {
+                val state = if (w.isCashedOut) "CASHED @ ${w.cashedMultiplier}x" else "IN FLIGHT (Target ${w.autoCashout}x)"
+                sb.append("• ${w.userId}: $${"%.2f".format(w.amount)} -> $state\n")
+            }
+        } else {
+            sb.append("• No whales (> $500) detected in current flight.\n")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("📊 Live Player Bets & Casino Exposure")
+            .setMessage(sb.toString())
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun showProvablyFairDialog() {
+        val view = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 10)
+        }
+
+        val etServerSeed = android.widget.EditText(this).apply {
+            hint = "Server Seed (64 hex characters)"
+            setText("4f9c1b82e307521a084bc5e67923485f2693892019ab763c8ef78201a036495b")
+            textSize = 12f
+        }
+        val etClientSeed = android.widget.EditText(this).apply {
+            hint = "Client Seed (3 player seeds combined)"
+            setText("0987654321_1234567890_5555555555")
+            textSize = 12f
+        }
+        val etRecordedMul = android.widget.EditText(this).apply {
+            hint = "Recorded Crash Multiplier (e.g. 2.45)"
+            setText("%.2f".format(viewModel.currentMultiplier.value ?: 2.00))
+            textSize = 12f
+        }
+
+        view.addView(android.widget.TextView(this).apply { text = "Server Seed (Hex):"; textSize = 11f; setTextColor(ContextCompat.getColor(context, R.color.text_muted)) })
+        view.addView(etServerSeed)
+        view.addView(android.widget.TextView(this).apply { text = "Combined Client Seed:"; textSize = 11f; setTextColor(ContextCompat.getColor(context, R.color.text_muted)) })
+        view.addView(etClientSeed)
+        view.addView(android.widget.TextView(this).apply { text = "Recorded Crash Multiplier:"; textSize = 11f; setTextColor(ContextCompat.getColor(context, R.color.text_muted)) })
+        view.addView(etRecordedMul)
+
+        AlertDialog.Builder(this)
+            .setTitle("🔐 Provably Fair SHA-512 Verifier")
+            .setView(view)
+            .setPositiveButton("Verify") { _, _ ->
+                val sSeed = etServerSeed.text.toString().trim()
+                val cSeed = etClientSeed.text.toString().trim()
+                val recMul = etRecordedMul.text.toString().toDoubleOrNull() ?: 1.00
+
+                val res = viewModel.verifyProvablyFair(sSeed, cSeed, recMul)
+                val statusText = if (res.isValid) "✅ 100% PROVABLY FAIR VERIFIED" else "❌ DISCREPANCY DETECTED"
+
+                val detailMsg = """
+Status: $statusText
+Calculated Multiplier: ${res.calculatedMultiplier}x
+Recorded Multiplier: ${res.recordedMultiplier}x
+Instant 1.00x Crash: ${res.instantCrash}
+First 13 Hex (52 bits): ${res.first13Hex}
+Decimal (h): ${res.decimalValue}
+HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
+                """.trimIndent()
+
+                AlertDialog.Builder(this)
+                    .setTitle("Cryptographic Audit Result")
+                    .setMessage(detailMsg)
+                    .setPositiveButton("Done", null)
+                    .show()
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 }

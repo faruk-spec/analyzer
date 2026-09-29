@@ -18,6 +18,7 @@ import com.example.aviatorsignallab.model.ResearchSummary
 import com.example.aviatorsignallab.model.TrafficItem
 import com.example.aviatorsignallab.protocol.GameState
 import com.example.aviatorsignallab.protocol.ProtocolDiscoveryEngine
+import com.example.aviatorsignallab.protocol.ServerReverseEngine
 import com.example.aviatorsignallab.protocol.StateChangeListener
 import com.example.aviatorsignallab.webview.NetworkEventListener
 import kotlinx.coroutines.Dispatchers
@@ -111,6 +112,18 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val zones = ProbabilityEngine.calculateZoneProbabilities(currentMultiplier)
         _survivalEstimate.postValue(estimate)
         _zoneProbabilities.postValue(zones)
+    }
+
+    // Server Reverse Engineering & Live Bet Telemetry LiveData
+    private val _betTelemetry = MutableLiveData(ServerReverseEngine.RoundBetTelemetry("--"))
+    val betTelemetry: LiveData<ServerReverseEngine.RoundBetTelemetry> = _betTelemetry
+
+    private val _recentDisassembledPackets = MutableLiveData<List<ServerReverseEngine.DisassembledPacket>>(emptyList())
+    val recentDisassembledPackets: LiveData<List<ServerReverseEngine.DisassembledPacket>> = _recentDisassembledPackets
+    private val packetDisassemblyBuffer = mutableListOf<ServerReverseEngine.DisassembledPacket>()
+
+    fun verifyProvablyFair(serverSeed: String, clientSeed: String, recordedMul: Double): ServerReverseEngine.ProvablyFairResult {
+        return ServerReverseEngine.verifyProvablyFair(serverSeed, clientSeed, recordedMul)
     }
 
     // Traffic Inspector LiveData & buffer
@@ -246,6 +259,17 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             trafficBuffer.add(item)
             _trafficItems.postValue(trafficBuffer.toList())
         }
+
+        // Disassemble packet and process live player bets & cashouts
+        val disassembled = ServerReverseEngine.disassemblePacket(transport, direction, safePayload)
+        synchronized(packetDisassemblyBuffer) {
+            if (packetDisassemblyBuffer.size >= 100) packetDisassemblyBuffer.removeAt(0)
+            packetDisassemblyBuffer.add(disassembled)
+            _recentDisassembledPackets.postValue(packetDisassemblyBuffer.toList())
+        }
+
+        val telemetry = ServerReverseEngine.processPacket(disassembled.opcode, safePayload, protocolEngine.currentMultiplier)
+        _betTelemetry.postValue(telemetry)
 
         // Real-time tick feed: record live multiplier ticks into LiveTickCadenceAnalyzer
         val isMultiplierTick = transport == "WEBSOCKET" && (safePayload.contains("\"cmd\":85") || safePayload.contains("\"mul\""))
@@ -389,6 +413,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _currentRoundId.postValue(currentRoundId)
         _currentMultiplier.postValue(multiplier)
         updateProbabilityEstimates(multiplier)
+        ServerReverseEngine.recalculateExposure(multiplier)
+        _betTelemetry.postValue(ServerReverseEngine.currentTelemetry)
 
         if (newState == GameState.LIVE || protocolEngine.currentState == GameState.LIVE) {
             liveTickAnalyzer.recordTick(System.currentTimeMillis())
@@ -409,6 +435,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _elapsedSeconds.postValue(0.0)
         _preCrashAlert.postValue(null)
         updateProbabilityEstimates(1.00)
+        ServerReverseEngine.onRoundStart(roundId)
+        _betTelemetry.postValue(ServerReverseEngine.currentTelemetry)
 
         // Reset alert guards for the new round
         prepareAlertFiredForRound.set(false)

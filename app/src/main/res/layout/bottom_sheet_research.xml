@@ -167,6 +167,40 @@
 
             </LinearLayout>
 
+            <!-- Deep Server Reverse Engineering Tools -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="10dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSheetBetExposure"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:text="📊 Bet Volume &amp; Risk"
+                    android:textSize="11sp"
+                    android:textColor="@color/accent_cyan"
+                    app:backgroundTint="@color/bg_secondary"
+                    app:strokeColor="@color/bg_card_border"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSheetProvablyFair"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:text="🔐 SHA-512 Verifier"
+                    android:textSize="11sp"
+                    android:textColor="@color/accent_purple"
+                    app:backgroundTint="@color/bg_secondary"
+                    app:strokeColor="@color/bg_card_border"
+                    app:strokeWidth="1dp" />
+            </LinearLayout>
+
             <!-- Quick Controls (Open, Reload, Pause/Resume) -->
             <LinearLayout
                 android:layout_width="match_parent"

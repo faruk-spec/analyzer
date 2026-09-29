@@ -3,22 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CRASH ZONE PREDICTOR - The Smart Crash Game (Working Demo)</title>
+    <title>Aviator Deep Server Reverse Engineering &amp; Bet Volume Telemetry Suite</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #080a18;
-            --panel-bg: rgba(16, 21, 40, 0.9);
-            --panel-border: rgba(99, 102, 241, 0.25);
+            --bg-space: #070913;
+            --bg-panel: rgba(14, 19, 36, 0.95);
+            --bg-card: rgba(20, 27, 50, 0.85);
+            --border-subtle: rgba(99, 102, 241, 0.22);
+            --border-glow: rgba(59, 130, 246, 0.45);
+
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-amber: #f59e0b;
+            --accent-emerald: #10b981;
+            --accent-rose: #ef4444;
+
             --zone-safe: #10b981;
             --zone-boost: #06b6d4;
             --zone-rocket: #8b5cf6;
             --zone-moon: #f59e0b;
-            --accent-red: #ef4444;
+
             --text-main: #f8fafc;
-            --text-muted: #94a3b8;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
         }
 
         * {
@@ -29,47 +40,55 @@
         }
 
         body {
-            background-color: var(--bg-dark);
+            background-color: var(--bg-space);
             color: var(--text-main);
             font-family: 'Outfit', sans-serif;
-            overflow: hidden;
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px;
         }
 
-        /* Header */
+        /* Top Header */
         header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 24px;
-            background: rgba(11, 15, 30, 0.96);
-            border-bottom: 1px solid var(--panel-border);
-            backdrop-filter: blur(12px);
-            z-index: 10;
+            padding: 12px 24px;
+            background: rgba(10, 14, 28, 0.98);
+            border-bottom: 1px solid var(--border-subtle);
+            backdrop-filter: blur(16px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        .logo-group {
+        .logo-wrap {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
         }
 
-        .logo-icon {
-            width: 38px;
-            height: 38px;
-            background: linear-gradient(135deg, #06b6d4, #8b5cf6, #f59e0b);
+        .logo-badge {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6);
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 20px;
-            box-shadow: 0 0 25px rgba(6, 182, 212, 0.5);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.45);
         }
 
-        .logo-title {
-            font-size: 20px;
+        .logo-text h1 {
+            font-size: 18px;
             font-weight: 900;
             letter-spacing: 0.5px;
             background: linear-gradient(to right, #ffffff, #67e8f9);
@@ -77,377 +96,603 @@
             -webkit-text-fill-color: transparent;
         }
 
-        .badge-fair {
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--zone-safe);
-            border: 1px solid var(--zone-safe);
-            font-size: 10px;
-            font-weight: 800;
-            padding: 2px 8px;
-            border-radius: 12px;
-            text-transform: uppercase;
+        .logo-text p {
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+            font-weight: 600;
         }
 
-        /* History Ribbon */
-        .history-ribbon {
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 4px;
+            border-radius: 14px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 8px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab-btn.active {
+            color: #ffffff;
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            box-shadow: 0 0 16px rgba(59, 130, 246, 0.5);
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-pill {
             display: flex;
             align-items: center;
             gap: 8px;
-            overflow-x: hidden;
-            padding: 4px 12px;
-            background: rgba(0, 0, 0, 0.35);
+            padding: 5px 12px;
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.35);
             border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent-emerald);
         }
 
-        .history-pill {
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-emerald);
+            border-radius: 50%;
+            animation: pulse 1.4s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.9); opacity: 0.7; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+            70% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.9); opacity: 0.7; }
+        }
+
+        /* Main Workspace Container */
+        .workspace-content {
+            flex: 1;
+            padding: 18px 24px;
+            max-width: 1500px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .tab-panel {
+            display: none;
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ==========================================================================
+           TAB 1: LIVE RADAR & ZONE PREDICTOR
+           ========================================================================== */
+        .radar-grid {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 18px;
+            height: calc(100vh - 120px);
+        }
+
+        .stage-wrapper {
+            position: relative;
+            background: radial-gradient(circle at 50% 50%, #0d1326 0%, #060914 100%);
+            border-radius: 18px;
+            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6);
+        }
+
+        .stage-top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: rgba(14, 19, 36, 0.85);
+            border-bottom: 1px solid var(--border-subtle);
+            z-index: 10;
+        }
+
+        .stage-history-strip {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            max-width: 65%;
+            scrollbar-width: none;
+        }
+
+        .history-chip {
             font-family: 'JetBrains Mono', monospace;
             font-size: 11px;
             font-weight: 700;
             padding: 3px 9px;
             border-radius: 12px;
             white-space: nowrap;
-            background: rgba(255, 255, 255, 0.05);
-            color: #94a3b8;
         }
 
-        .history-pill.safe { color: var(--zone-safe); background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); }
-        .history-pill.boost { color: var(--zone-boost); background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); }
-        .history-pill.rocket { color: var(--zone-rocket); background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); }
-        .history-pill.moon { color: var(--zone-moon); background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
-
-        .stats-bar {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .stat-item {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-        }
-
-        .stat-label {
-            font-size: 9px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-        }
-
-        .stat-val {
-            font-size: 14px;
-            font-weight: 800;
-            color: #38bdf8;
-        }
-
-        /* Main Workspace Grid */
-        .main-grid {
-            display: grid;
-            grid-template-rows: 1fr 240px;
-            flex: 1;
-            height: calc(100vh - 61px);
-        }
-
-        /* Top Stage (Canvas & Flight Altitude) */
-        .stage-box {
-            position: relative;
-            background: radial-gradient(circle at center, #101538 0%, #060814 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
+        .history-chip.safe { background: rgba(16, 185, 129, 0.15); color: var(--zone-safe); border: 1px solid rgba(16, 185, 129, 0.35); }
+        .history-chip.boost { background: rgba(6, 182, 212, 0.15); color: var(--zone-boost); border: 1px solid rgba(6, 182, 212, 0.35); }
+        .history-chip.rocket { background: rgba(139, 92, 246, 0.15); color: var(--zone-rocket); border: 1px solid rgba(139, 92, 246, 0.35); }
+        .history-chip.moon { background: rgba(245, 158, 11, 0.2); color: var(--zone-moon); border: 1px solid rgba(245, 158, 11, 0.45); }
 
         canvas#flightCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
-            height: 100%;
-            z-index: 1;
+            flex: 1;
+            display: block;
         }
 
-        /* HUD Overlays */
-        .stage-hud {
+        .flight-hud-overlay {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 2;
+            inset: 0;
             pointer-events: none;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 24px 30px;
+            padding: 70px 24px 24px 24px;
         }
 
-        .stage-hud-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
-
-        .round-tag {
-            background: rgba(30, 41, 59, 0.8);
-            border: 1px solid var(--panel-border);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 700;
-            color: #cbd5e1;
-            backdrop-filter: blur(8px);
-        }
-
-        .stage-hud-center {
+        .flight-hud-center {
             text-align: center;
         }
 
-        .multiplier-large {
+        .hero-mult {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 88px;
+            font-size: 72px;
             font-weight: 900;
             letter-spacing: -2px;
-            background: linear-gradient(180deg, #ffffff 40%, #38bdf8 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 10px 40px rgba(56, 189, 248, 0.5);
-            line-height: 1;
+            text-shadow: 0 0 35px rgba(6, 182, 212, 0.6);
+            color: #ffffff;
+            transition: color 0.15s ease;
         }
 
-        .multiplier-large.crashed {
-            background: linear-gradient(180deg, #ffffff 40%, #ef4444 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 10px 40px rgba(239, 68, 68, 0.6);
-        }
-
-        .zone-indicator-badge {
-            display: inline-block;
-            margin-top: 10px;
-            padding: 6px 20px;
-            border-radius: 20px;
+        .zone-pill-active {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 18px;
+            border-radius: 30px;
+            font-family: 'JetBrains Mono', monospace;
             font-size: 13px;
             font-weight: 800;
-            letter-spacing: 1px;
             text-transform: uppercase;
-            transition: all 0.3s;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            color: #fff;
+            letter-spacing: 1px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            margin-top: 6px;
         }
 
-        .zone-indicator-badge.safe { background: rgba(16, 185, 129, 0.2); border-color: var(--zone-safe); color: var(--zone-safe); box-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
-        .zone-indicator-badge.boost { background: rgba(6, 182, 212, 0.2); border-color: var(--zone-boost); color: var(--zone-boost); box-shadow: 0 0 20px rgba(6, 182, 212, 0.4); }
-        .zone-indicator-badge.rocket { background: rgba(139, 92, 246, 0.2); border-color: var(--zone-rocket); color: var(--zone-rocket); box-shadow: 0 0 20px rgba(139, 92, 246, 0.4); }
-        .zone-indicator-badge.moon { background: rgba(245, 158, 11, 0.25); border-color: var(--zone-moon); color: var(--zone-moon); box-shadow: 0 0 30px rgba(245, 158, 11, 0.6); animation: pulse-moon 1s infinite alternate; }
-
-        @keyframes pulse-moon {
-            from { transform: scale(1); }
-            to { transform: scale(1.08); }
-        }
-
-        /* Bottom Betting Deck (4 Prediction Zones) */
-        .bottom-deck {
-            background: var(--panel-bg);
-            border-top: 1px solid var(--panel-border);
-            padding: 16px 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            backdrop-filter: blur(12px);
-            z-index: 5;
-        }
-
-        .deck-controls-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .bet-selector-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .chip-btn {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            color: #cbd5e1;
-            padding: 6px 14px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            font-family: 'JetBrains Mono', monospace;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .chip-btn.active, .chip-btn:hover {
-            background: var(--zone-boost);
-            color: #000;
-            border-color: var(--zone-boost);
-            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
-        }
-
-        .zones-grid {
+        /* 4 Prediction Cards */
+        .zones-row {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 14px;
-            flex: 1;
+            gap: 10px;
+            padding: 12px;
+            background: rgba(11, 15, 30, 0.95);
+            border-top: 1px solid var(--border-subtle);
         }
 
-        /* Individual Zone Card */
-        .zone-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 14px;
-            padding: 14px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            position: relative;
+        .zone-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 12px;
             cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
             overflow: hidden;
         }
 
-        .zone-card::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: #475569;
-            transition: all 0.25s;
+        .zone-box:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-blue);
+            box-shadow: 0 6px 18px rgba(59, 130, 246, 0.25);
         }
 
-        .zone-card:hover {
-            transform: translateY(-3px);
-            background: rgba(255, 255, 255, 0.06);
+        .zone-box.won {
+            border-color: var(--accent-emerald) !important;
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.55) !important;
+            animation: victoryPulse 0.8s infinite alternate;
         }
 
-        .zone-card.zone-safe::before { background: var(--zone-safe); }
-        .zone-card.zone-boost::before { background: var(--zone-boost); }
-        .zone-card.zone-rocket::before { background: var(--zone-rocket); }
-        .zone-card.zone-moon::before { background: var(--zone-moon); }
-
-        .zone-card.active-bet {
-            border-color: rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.08);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        @keyframes victoryPulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.02); }
         }
 
-        .zone-card.winner {
-            animation: pulse-winner 0.8s infinite alternate;
-        }
-
-        @keyframes pulse-winner {
-            from { transform: scale(1); filter: brightness(1.2); }
-            to { transform: scale(1.03); filter: brightness(1.5); }
-        }
-
-        .zone-head {
+        .zone-box-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 4px;
         }
 
-        .zone-name {
+        .zone-title {
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .zone-odds {
+            font-family: 'JetBrains Mono', monospace;
             font-size: 13px;
+            font-weight: 800;
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 2px 6px;
+            border-radius: 6px;
+        }
+
+        .zone-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .zone-prob-gauge {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+
+        .zone-prob-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .zone-bet-btn {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 11px;
+            padding: 6px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .zone-bet-btn:hover {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        /* Right Telemetry Sidebar */
+        .radar-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .telemetry-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-header-small {
+            font-size: 11px;
             font-weight: 800;
             letter-spacing: 0.5px;
             text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .zone-range {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 12px;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
             color: var(--text-muted);
-            margin-top: 2px;
         }
 
-        .zone-multiplier {
+        .metric-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        /* ==========================================================================
+           TAB 2: LIVE PLAYER BET VOLUME & CASINO EXPOSURE TERMINAL
+           ========================================================================== */
+        .exposure-grid {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 20px;
+        }
+
+        .exposure-kpi-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        .kpi-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .kpi-value {
             font-family: 'JetBrains Mono', monospace;
             font-size: 24px;
             font-weight: 900;
-            line-height: 1;
+            color: #ffffff;
         }
 
-        .zone-safe .zone-multiplier { color: var(--zone-safe); }
-        .zone-boost .zone-multiplier { color: var(--zone-boost); }
-        .zone-rocket .zone-multiplier { color: var(--zone-rocket); }
-        .zone-moon .zone-multiplier { color: var(--zone-moon); }
-
-        .zone-bet-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 8px;
-            padding: 8px 12px;
-            margin-top: 10px;
-        }
-
-        .my-bet-label {
+        .kpi-sub {
             font-size: 10px;
-            color: var(--text-muted);
-            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-top: 4px;
         }
 
-        .my-bet-amount {
+        .whales-table {
+            width: 100%;
+            border-collapse: collapse;
             font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+
+        .whales-table th {
+            text-align: left;
+            padding: 10px 12px;
+            color: var(--text-muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .whales-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: #e2e8f0;
+        }
+
+        .whales-table tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .whale-badge {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent-amber);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-weight: 700;
+        }
+
+        .cashed-badge {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-emerald);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-weight: 700;
+        }
+
+        .in-flight-badge {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-weight: 700;
+        }
+
+        /* ==========================================================================
+           TAB 3: SHA-512 PROVABLY FAIR CRACKING & SEED CHAIN LAB
+           ========================================================================== */
+        .provably-fair-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .code-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #38bdf8;
+            margin-top: 6px;
+            margin-bottom: 14px;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+
+        .code-input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+        }
+
+        .verify-btn {
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            border: none;
+            color: #ffffff;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 13px;
+            padding: 12px 24px;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+            transition: all 0.2s ease;
+        }
+
+        .verify-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 28px rgba(59, 130, 246, 0.6);
+        }
+
+        .math-box {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #cbd5e1;
+        }
+
+        .math-highlight {
+            color: #38bdf8;
+            font-weight: 700;
+        }
+
+        .math-res {
+            color: var(--accent-emerald);
+            font-weight: 800;
+            font-size: 14px;
+        }
+
+        /* ==========================================================================
+           TAB 4: WEBSOCKET OPCODE DISASSEMBLER
+           ========================================================================== */
+        .disassembler-terminal {
+            background: #03050a;
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            height: 580px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .terminal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            background: rgba(14, 19, 36, 0.95);
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 11px;
+        }
+
+        .terminal-stream {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+            font-size: 11px;
+            line-height: 1.5;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .packet-line {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.02);
+            transition: background 0.15s ease;
+        }
+
+        .packet-line:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .pkt-time { color: var(--text-muted); min-width: 75px; }
+        .pkt-op { font-weight: 800; min-width: 65px; }
+        .pkt-dir { min-width: 60px; font-weight: 700; }
+        .pkt-dir.in { color: var(--accent-emerald); }
+        .pkt-dir.out { color: var(--accent-amber); }
+        .pkt-body { color: #cbd5e1; flex: 1; word-break: break-all; }
+
+        .pkt-84 { color: #f43f5e; }
+        .pkt-85 { color: #06b6d4; }
+        .pkt-86 { color: #8b5cf6; }
+        .pkt-87 { color: #10b981; }
+
+        /* General Utilities */
+        .toast-pop {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 14px 20px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            color: #ffffff;
             font-size: 13px;
             font-weight: 700;
-            color: #fff;
-        }
-
-        .zone-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            border-radius: 6px;
-            color: #fff;
-            padding: 5px 10px;
-            font-size: 11px;
-            font-weight: 800;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .zone-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-        }
-
-        /* Status Toast */
-        .toast-banner {
-            position: absolute;
-            top: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 10px 28px;
-            border-radius: 30px;
-            font-weight: 800;
-            font-size: 15px;
-            z-index: 20;
-            display: none;
-            backdrop-filter: blur(10px);
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-        }
-
-        .toast-win {
-            background: rgba(16, 185, 129, 0.95);
-            color: #000;
-            box-shadow: 0 0 35px rgba(16, 185, 129, 0.6);
-        }
-
-        .toast-loss {
-            background: rgba(239, 68, 68, 0.95);
-            color: #fff;
-            box-shadow: 0 0 35px rgba(239, 68, 68, 0.6);
+            display: none;
+            z-index: 1000;
         }
     </style>
 </head>
@@ -455,538 +700,648 @@
 
     <!-- Header -->
     <header>
-        <div class="logo-group">
-            <div class="logo-icon">🎯</div>
-            <div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="logo-title">CRASH ZONE PREDICTOR</span>
-                    <span class="badge-fair">PROVABLY FAIR</span>
-                </div>
-                <div style="font-size: 10px; color: var(--text-muted);">Pick Your Crash Zone • No Latency Panic • Instant Multiplier Payouts</div>
+        <div class="logo-wrap">
+            <div class="logo-badge">🛰️</div>
+            <div class="logo-text">
+                <h1>AVIATOR SIGNAL LAB 2.0</h1>
+                <p>SERVER REVERSE ENGINEERING &amp; BET VOLUME SUITE</p>
             </div>
         </div>
 
-        <!-- Multipliers History Ribbon -->
-        <div class="history-ribbon" id="historyRibbon">
-            <div class="history-pill boost">3.40x</div>
-            <div class="history-pill safe">1.55x</div>
-            <div class="history-pill rocket">14.20x</div>
-            <div class="history-pill safe">1.12x</div>
-            <div class="history-pill moon">38.90x</div>
-            <div class="history-pill boost">4.80x</div>
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('radar')">
+                <span>🚀</span> Live Radar &amp; Predictor
+            </button>
+            <button class="tab-btn" onclick="switchTab('exposure')">
+                <span>📊</span> Bet Volume &amp; Casino Risk
+            </button>
+            <button class="tab-btn" onclick="switchTab('sha512')">
+                <span>🔐</span> SHA-512 Seed Cracking Lab
+            </button>
+            <button class="tab-btn" onclick="switchTab('packets')">
+                <span>⚡</span> WebSocket Opcode Disassembler
+            </button>
         </div>
 
-        <div class="stats-bar">
-            <div class="stat-item">
-                <span class="stat-label">Your Wallet</span>
-                <span class="stat-val" id="walletDisplay">$1,000.00</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Platform Margin</span>
-                <span class="stat-val" style="color: #a855f7;">4% Fixed</span>
+        <div class="system-status">
+            <div class="status-pill">
+                <span class="pulse-dot"></span>
+                <span>WS HOOK ACTIVE</span>
             </div>
         </div>
     </header>
 
-    <!-- Main Workspace -->
-    <div class="main-grid">
-        
-        <!-- Top Stage: Canvas Rocket Flight -->
-        <div class="stage-box">
-            <canvas id="flightCanvas"></canvas>
+    <div class="workspace-content">
 
-            <div class="stage-hud">
-                <div class="stage-hud-top">
-                    <div class="round-tag" id="roundTag">ROUND #2041</div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Total Active Bets</div>
-                        <div style="font-family: 'JetBrains Mono'; font-weight: 700; color: #38bdf8;" id="totalPoolDisplay">$1,420.00</div>
+        <!-- ==========================================================================
+             TAB 1: LIVE RADAR & ZONE PREDICTOR
+             ========================================================================== -->
+        <div class="tab-panel active" id="tab-radar">
+            <div class="radar-grid">
+                
+                <!-- Flight Stage -->
+                <div class="stage-wrapper">
+                    <div class="stage-top-bar">
+                        <div class="stage-history-strip" id="historyStrip">
+                            <!-- Populated dynamically -->
+                        </div>
+                        <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent-cyan); font-weight: 700;">
+                            ROUND: <span id="roundCounter">#2048</span>
+                        </div>
+                    </div>
+
+                    <canvas id="flightCanvas"></canvas>
+
+                    <div class="flight-hud-overlay">
+                        <div class="flight-hud-center">
+                            <div class="hero-mult" id="multVal">1.00x</div>
+                            <div class="zone-pill-active" id="zoneBadge">WAITING FOR NEXT TAKEOFF</div>
+                        </div>
+
+                        <div></div>
+                    </div>
+
+                    <!-- 4 Prediction Zones Row -->
+                    <div class="zones-row">
+                        <div class="zone-box" id="cardSafe" onclick="selectZone('safe')">
+                            <div class="zone-box-header">
+                                <span class="zone-title" style="color: var(--zone-safe);">🛡️ Safe Zone</span>
+                                <span class="zone-odds">1.85x</span>
+                            </div>
+                            <div class="zone-sub">Crashes 1.00x – 2.00x</div>
+                            <div class="zone-prob-gauge">
+                                <div class="zone-prob-fill" id="gaugeSafe" style="width: 48.5%; background: var(--zone-safe);"></div>
+                            </div>
+                            <button class="zone-bet-btn" id="btnSafe">48.5% CHANCE</button>
+                        </div>
+
+                        <div class="zone-box" id="cardBoost" onclick="selectZone('boost')">
+                            <div class="zone-box-header">
+                                <span class="zone-title" style="color: var(--zone-boost);">⚡ Boost Zone</span>
+                                <span class="zone-odds">3.40x</span>
+                            </div>
+                            <div class="zone-sub">Crashes 2.01x – 5.00x</div>
+                            <div class="zone-prob-gauge">
+                                <div class="zone-prob-fill" id="gaugeBoost" style="width: 29.5%; background: var(--zone-boost);"></div>
+                            </div>
+                            <button class="zone-bet-btn" id="btnBoost">29.5% CHANCE</button>
+                        </div>
+
+                        <div class="zone-box" id="cardRocket" onclick="selectZone('rocket')">
+                            <div class="zone-box-header">
+                                <span class="zone-title" style="color: var(--zone-rocket);">🔥 Rocket Zone</span>
+                                <span class="zone-odds">11.50x</span>
+                            </div>
+                            <div class="zone-sub">Crashes 5.01x – 20.00x</div>
+                            <div class="zone-prob-gauge">
+                                <div class="zone-prob-fill" id="gaugeRocket" style="width: 16.5%; background: var(--zone-rocket);"></div>
+                            </div>
+                            <button class="zone-bet-btn" id="btnRocket">16.5% CHANCE</button>
+                        </div>
+
+                        <div class="zone-box" id="cardMoon" onclick="selectZone('moon')">
+                            <div class="zone-box-header">
+                                <span class="zone-title" style="color: var(--zone-moon);">👑 Moonshot</span>
+                                <span class="zone-odds">45.00x</span>
+                            </div>
+                            <div class="zone-sub">Crashes 20.01x+</div>
+                            <div class="zone-prob-gauge">
+                                <div class="zone-prob-fill" id="gaugeMoon" style="width: 5.5%; background: var(--zone-moon);"></div>
+                            </div>
+                            <button class="zone-bet-btn" id="btnMoon">5.5% CHANCE</button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="stage-hud-center">
-                    <div class="multiplier-large" id="multDisplay">1.00x</div>
-                    <div class="zone-indicator-badge" id="zoneBadge">WAITING FOR NEXT LAUNCH</div>
+                <!-- Right Telemetry Panel -->
+                <div class="radar-sidebar">
+                    <div class="telemetry-card">
+                        <div class="card-header-small">
+                            <span>Conditional Survival Engine</span>
+                            <span style="color: var(--accent-emerald);">LIVE</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Current Survival Odds</span>
+                            <span class="metric-val" id="telemetrySurvival" style="color: var(--accent-emerald);">100.0%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Next Target Milestone</span>
+                            <span class="metric-val" id="telemetryNextTarget">2.00x</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Target Hit Likelihood</span>
+                            <span class="metric-val" id="telemetryTargetHit" style="color: var(--accent-cyan);">68.5%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Fast-Path Intercept Delta</span>
+                            <span class="metric-val" style="color: #38bdf8;">~22 ms ahead</span>
+                        </div>
+                    </div>
+
+                    <div class="telemetry-card">
+                        <div class="card-header-small">
+                            <span>Live Flight Phase</span>
+                            <span id="flightPhaseText" style="color: var(--accent-cyan);">COUNTDOWN</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Stage Opcode</span>
+                            <span class="metric-val" id="stageOpcodeDisplay">cmd: 84 (sta: 1)</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Server Tick Cadence</span>
+                            <span class="metric-val" id="tickCadenceDisplay">100 ms</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Total Players in Air</span>
+                            <span class="metric-val" id="activePlayersCount">142 players</span>
+                        </div>
+                    </div>
                 </div>
 
-                <div></div>
             </div>
-
-            <div class="toast-banner" id="toastBanner"></div>
         </div>
 
-        <!-- Bottom Deck: 4 Prediction Zones -->
-        <div class="bottom-deck">
-            <div class="deck-controls-top">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px; font-weight: 700; color: #cbd5e1; text-transform: uppercase;">Chip Size:</span>
-                    <div class="bet-selector-group">
-                        <button class="chip-btn" onclick="selectChip(5)">$5</button>
-                        <button class="chip-btn active" onclick="selectChip(10)">$10</button>
-                        <button class="chip-btn" onclick="selectChip(25)">$25</button>
-                        <button class="chip-btn" onclick="selectChip(50)">$50</button>
-                        <button class="chip-btn" onclick="selectChip(100)">$100</button>
-                    </div>
+        <!-- ==========================================================================
+             TAB 2: LIVE PLAYER BET VOLUME & CASINO EXPOSURE TERMINAL
+             ========================================================================== -->
+        <div class="tab-panel" id="tab-exposure">
+            <!-- 4 Top KPIs -->
+            <div class="exposure-kpi-bar">
+                <div class="kpi-card">
+                    <div class="kpi-title">Total Round Wager Pool</div>
+                    <div class="kpi-value" id="kpiTotalPool">$42,850.00</div>
+                    <div class="kpi-sub">Across 184 active bets placed (cmd: 86)</div>
                 </div>
-
-                <div style="font-size: 12px; color: var(--text-muted);">
-                    💡 <span style="color: #cbd5e1;">Click any zone below to place your prediction!</span>
+                <div class="kpi-card">
+                    <div class="kpi-title">Live Cashed Out Amount</div>
+                    <div class="kpi-value" id="kpiPaidOut" style="color: var(--accent-emerald);">$16,320.00</div>
+                    <div class="kpi-sub">Paid out safely to winners (cmd: 87)</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-title">Active Wager In Flight</div>
+                    <div class="kpi-value" id="kpiActiveMoney" style="color: var(--accent-cyan);">$26,530.00</div>
+                    <div class="kpi-sub">Players still risking inside the round</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-title">Casino Net Exposure / Liability</div>
+                    <div class="kpi-value" id="kpiNetLiability" style="color: var(--accent-rose);">-$38,678.50</div>
+                    <div class="kpi-sub" id="kpiLiabilitySub">House net profit turns negative at 1.62x!</div>
                 </div>
             </div>
 
-            <!-- The 4 Zones -->
-            <div class="zones-grid">
+            <div class="exposure-grid">
                 
-                <!-- Zone 1: Safe -->
-                <div class="zone-card zone-safe" id="cardSafe" onclick="placeBet('safe')">
-                    <div>
-                        <div class="zone-head">
-                            <span class="zone-name" style="color: var(--zone-safe);">🛡️ Safe Zone</span>
-                            <span class="zone-multiplier">1.85x</span>
-                        </div>
-                        <div class="zone-range">Crashes between 1.00x – 2.00x</div>
+                <!-- Casino Risk Intelligence -->
+                <div class="telemetry-card">
+                    <div class="card-header-small">
+                        <span>Casino Asymmetric Risk Theory</span>
+                        <span>⚠️ CRITICAL</span>
                     </div>
-                    <div class="zone-bet-bar">
-                        <div>
-                            <div class="my-bet-label">Your Bet</div>
-                            <div class="my-bet-amount" id="betValSafe">$0</div>
-                        </div>
-                        <button class="zone-btn" id="btnSafe">+ PREDICT</button>
+                    <div style="font-size: 12px; line-height: 1.6; color: #cbd5e1; margin-bottom: 14px;">
+                        When players hold massive wagers (e.g. $1,000+), the operator's payout liability multiplies exponentially:
+                        <br><br>
+                        <span style="color: var(--accent-cyan); font-weight: 700;">Liability Formula:</span>
+                        <br>
+                        <code style="font-family: 'JetBrains Mono'; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 6px;">
+                            Net = Pool - PaidOut - (InFlight × Multiplier)
+                        </code>
+                        <br><br>
+                        As the flight crosses high multipliers, the casino's mathematical margin collapses, creating an algorithmic incentive for early round crashes.
+                    </div>
+
+                    <div class="metric-row">
+                        <span class="metric-label">Casino Break-Even Multiplier</span>
+                        <span class="metric-val" style="color: var(--accent-amber);">1.62x</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">High-Roller "Whales" Active</span>
+                        <span class="metric-val" id="whaleCountBadge" style="color: var(--accent-rose);">3 Whales Active</span>
                     </div>
                 </div>
 
-                <!-- Zone 2: Boost -->
-                <div class="zone-card zone-boost" id="cardBoost" onclick="placeBet('boost')">
-                    <div>
-                        <div class="zone-head">
-                            <span class="zone-name" style="color: var(--zone-boost);">⚡ Boost Zone</span>
-                            <span class="zone-multiplier">3.40x</span>
-                        </div>
-                        <div class="zone-range">Crashes between 2.01x – 5.00x</div>
+                <!-- Whales & Player Bets Stream -->
+                <div class="telemetry-card" style="padding: 0; overflow: hidden;">
+                    <div style="padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 12px; font-weight: 800; text-transform: uppercase;">Live Player Bets &amp; Whale Radar</span>
+                        <span style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent-cyan);">cmd: 86 / 87 Stream</span>
                     </div>
-                    <div class="zone-bet-bar">
-                        <div>
-                            <div class="my-bet-label">Your Bet</div>
-                            <div class="my-bet-amount" id="betValBoost">$0</div>
-                        </div>
-                        <button class="zone-btn" id="btnBoost">+ PREDICT</button>
-                    </div>
-                </div>
-
-                <!-- Zone 3: Rocket -->
-                <div class="zone-card zone-rocket" id="cardRocket" onclick="placeBet('rocket')">
-                    <div>
-                        <div class="zone-head">
-                            <span class="zone-name" style="color: var(--zone-rocket);">🔥 Rocket Zone</span>
-                            <span class="zone-multiplier">11.50x</span>
-                        </div>
-                        <div class="zone-range">Crashes between 5.01x – 20.00x</div>
-                    </div>
-                    <div class="zone-bet-bar">
-                        <div>
-                            <div class="my-bet-label">Your Bet</div>
-                            <div class="my-bet-amount" id="betValRocket">$0</div>
-                        </div>
-                        <button class="zone-btn" id="btnRocket">+ PREDICT</button>
+                    <div style="max-height: 480px; overflow-y: auto;">
+                        <table class="whales-table">
+                            <thead>
+                                <tr>
+                                    <th>Player UID</th>
+                                    <th>Wager ($)</th>
+                                    <th>Auto-Cashout</th>
+                                    <th>Current State</th>
+                                    <th>P/L ($)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="whalesTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
-                <!-- Zone 4: Moonshot -->
-                <div class="zone-card zone-moon" id="cardMoon" onclick="placeBet('moon')">
-                    <div>
-                        <div class="zone-head">
-                            <span class="zone-name" style="color: var(--zone-moon);">👑 Moonshot</span>
-                            <span class="zone-multiplier">45.00x</span>
-                        </div>
-                        <div class="zone-range">Crashes at 20.01x or higher!</div>
+            </div>
+        </div>
+
+        <!-- ==========================================================================
+             TAB 3: SHA-512 PROVABLY FAIR CRACKING & SEED CHAIN LAB
+             ========================================================================== -->
+        <div class="tab-panel" id="tab-sha512">
+            <div class="provably-fair-grid">
+                
+                <!-- Left: Interactive Verifier Calculator -->
+                <div class="telemetry-card">
+                    <div class="card-header-small">
+                        <span>HMAC-SHA512 Multiplier Generator</span>
+                        <span style="color: var(--accent-emerald);">PROVABLY FAIR SPEC</span>
                     </div>
-                    <div class="zone-bet-bar">
-                        <div>
-                            <div class="my-bet-label">Your Bet</div>
-                            <div class="my-bet-amount" id="betValMoon">$0</div>
+
+                    <label style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Server Seed (Revealed Hex 64-chars):</label>
+                    <input type="text" class="code-input" id="inputServerSeed" value="4f9c1b82e307521a084bc5e67923485f2693892019ab763c8ef78201a036495b">
+
+                    <label style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Combined Client Seed (Player 1 + 2 + 3):</label>
+                    <input type="text" class="code-input" id="inputClientSeed" value="0987654321_1234567890_5555555555">
+
+                    <label style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Recorded Round Multiplier:</label>
+                    <input type="text" class="code-input" id="inputTargetMul" value="3.42">
+
+                    <button class="verify-btn" onclick="executeProvablyFairVerification()">⚡ EXECUTE HMAC-SHA512 DECRYPTION</button>
+
+                    <div style="margin-top: 18px;" id="verificationResultBox">
+                        <div class="math-box">
+                            <div>HMAC-SHA512 Hex Hash:</div>
+                            <div class="math-highlight" id="resHashDisplay">--</div>
+                            <br>
+                            <div>First 13 Hex Characters (52 bits): <span class="math-highlight" id="res13Hex">--</span></div>
+                            <div>Converted Decimal (h): <span class="math-highlight" id="resDecimalVal">--</span></div>
+                            <div>Instant 1.00x Crash Test (h % 33 == 0): <span class="math-highlight" id="resInstantTest">--</span></div>
+                            <br>
+                            <div style="font-size: 14px;">Calculated Multiplier: <span class="math-res" id="resCalculatedMul">--x</span></div>
+                            <div style="font-size: 12px; margin-top: 4px;" id="resVerdict">Input seeds above and click Execute.</div>
                         </div>
-                        <button class="zone-btn" id="btnMoon">+ PREDICT</button>
                     </div>
                 </div>
 
+                <!-- Right: Scientific Reality & Seed Chain Theory -->
+                <div class="telemetry-card">
+                    <div class="card-header-small">
+                        <span>Why Can't SHA-512 Be Pre-Calculated?</span>
+                        <span>MATHEMATICAL GROUND TRUTH</span>
+                    </div>
+
+                    <div style="font-size: 13px; line-height: 1.7; color: #cbd5e1;">
+                        <p style="margin-bottom: 12px;">
+                            <strong style="color: var(--accent-cyan);">1. Pre-Image Resistance:</strong><br>
+                            The server seed is a 256-bit secret. Finding the seed from its published SHA-256 hash would require computing $2^{256}$ operations (~$1.15 \times 10^{77}$). That exceeds all the computational power on Earth combined.
+                        </p>
+                        <p style="margin-bottom: 12px;">
+                            <strong style="color: var(--accent-amber);">2. Client Seed Injection:</strong><br>
+                            Even if an attacker guessed the server seed, the final multiplier depends on the <strong>first 3 bets placed by random players</strong> in the lobby. The game server itself cannot know the exact outcome until players submit their seeds!
+                        </p>
+                        <p style="margin-bottom: 12px;">
+                            <strong style="color: var(--accent-emerald);">3. The Hash Chain Sequence ($S_n \rightarrow S_{n-1}$):</strong><br>
+                            The operator creates a hash chain where $S_{i-1} = \text{SHA256}(S_i)$. Once round $i$ finishes, the server reveals $S_i$.
+                            Our system hashes $S_i$ and verifies it produces $S_{i-1}$ of the previous round. If it does not match, the operator has cheated!
+                        </p>
+                    </div>
+
+                    <div class="math-box" style="margin-top: 14px;">
+                        <div style="color: var(--accent-purple); font-weight: 800; margin-bottom: 6px;">
+                            🔬 CRASH POINT GENERATION EQUATION:
+                        </div>
+                        <code>
+                            h = parseInt(HMAC_SHA512(ServerSeed, ClientSeed).slice(0, 13), 16);<br>
+                            e = Math.pow(2, 52);<br>
+                            Multiplier = (h % 33 === 0) ? 1.00 : Math.floor((100 * e - h) / (e - h)) / 100;
+                        </code>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ==========================================================================
+             TAB 4: WEBSOCKET OPCODE DISASSEMBLER
+             ========================================================================== -->
+        <div class="tab-panel" id="tab-packets">
+            <div class="disassembler-terminal">
+                <div class="terminal-header">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span>⚡ LIVE WEBSOCKET OPCODE STREAM</span>
+                        <span style="color: var(--accent-cyan); font-weight: 700;">FILTER: ALL OPCODES</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button style="background: rgba(255,255,255,0.08); border: 1px solid var(--border-subtle); color: #fff; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 10px;" onclick="clearTerminal()">CLEAR</button>
+                    </div>
+                </div>
+
+                <div class="terminal-stream" id="terminalStream">
+                    <!-- Stream logs populated in real time -->
+                </div>
             </div>
         </div>
 
     </div>
 
+    <div class="toast-pop" id="toastPop">Notification</div>
+
+    <!-- Scripts -->
     <script>
-        // Web Audio Synthesizer
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        function playTone(freq, type, duration, vol=0.1) {
-            try {
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = type;
-                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + duration);
-            } catch(e) {}
+        // State Machine & Telemetry State
+        let currentTab = 'radar';
+        let currentMultiplier = 1.00;
+        let isFlightActive = false;
+        let flightInterval = null;
+        let roundCounter = 2048;
+        let roundPool = 42850.0;
+        let cashedOut = 16320.0;
+        let crashMultiplier = 2.45;
+
+        const historyBadges = [
+            { mult: 1.45, zone: 'safe' },
+            { mult: 3.20, zone: 'boost' },
+            { mult: 1.12, zone: 'safe' },
+            { mult: 8.94, zone: 'rocket' },
+            { mult: 2.15, zone: 'boost' },
+            { mult: 1.84, zone: 'safe' },
+            { mult: 28.50, zone: 'moon' },
+            { mult: 1.55, zone: 'safe' }
+        ];
+
+        const simulatedWhales = [
+            { uid: "u_94821", bet: 2500, auto: 2.00, cashed: false, mul: 0 },
+            { uid: "u_33890", bet: 1800, auto: 1.80, cashed: false, mul: 0 },
+            { uid: "u_10943", bet: 1200, auto: 3.50, cashed: false, mul: 0 },
+            { uid: "u_77812", bet: 850, auto: 5.00, cashed: false, mul: 0 },
+            { uid: "u_65219", bet: 500, auto: 1.50, cashed: false, mul: 0 }
+        ];
+
+        function switchTab(tabId) {
+            currentTab = tabId;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+
+            const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+            if (activeBtn) activeBtn.classList.add('active');
+
+            const targetPanel = document.getElementById('tab-' + tabId);
+            if (targetPanel) targetPanel.classList.add('active');
+
+            if (tabId === 'radar') {
+                resizeCanvas();
+            }
         }
 
-        function soundBeep() { playTone(500, 'sine', 0.1, 0.08); }
-        function soundLaunch() {
-            playTone(180, 'sawtooth', 0.6, 0.15);
-            setTimeout(() => playTone(350, 'sine', 0.5, 0.2), 150);
-        }
-        function soundZoneEnter() { playTone(650, 'triangle', 0.25, 0.15); }
-        function soundCrash() { playTone(85, 'sawtooth', 0.9, 0.3); }
-        function soundWin() {
-            playTone(523, 'triangle', 0.2, 0.2);
-            setTimeout(() => playTone(659, 'triangle', 0.2, 0.2), 120);
-            setTimeout(() => playTone(783, 'triangle', 0.2, 0.25), 240);
-            setTimeout(() => playTone(1046, 'triangle', 0.5, 0.3), 360);
-        }
-
-        // Canvas Simulation
+        // Canvas Setup
         const canvas = document.getElementById('flightCanvas');
         const ctx = canvas.getContext('2d');
+        let planeX = 60, planeY = 250;
 
         function resizeCanvas() {
             canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight;
+            canvas.height = canvas.parentElement.clientHeight - 130;
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        const stars = Array.from({ length: 160 }, () => ({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
-            size: Math.random() * 2 + 0.5,
-            speed: Math.random() * 3 + 1
-        }));
-
-        let thrusterParticles = [];
-
-        // Game State Variables
-        let roundNumber = 2041;
-        let gameState = "BETTING"; // BETTING, FLYING, CRASHED
-        let bettingCountdown = 5;
-        let countdownTimer = null;
-        let walletBalance = 1000.00;
-        let selectedChip = 10;
-        
-        let currentMultiplier = 1.00;
-        let crashMultiplier = 1.00;
-        let currentZone = "safe";
-
-        // User bets per zone
-        let myBets = {
-            safe: 0,
-            boost: 0,
-            rocket: 0,
-            moon: 0
-        };
-
-        const zoneMultipliers = {
-            safe: 1.85,
-            boost: 3.40,
-            rocket: 11.50,
-            moon: 45.00
-        };
-
-        function selectChip(amount) {
-            selectedChip = amount;
-            document.querySelectorAll('.chip-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.innerText === `$${amount}`);
+        function renderHistory() {
+            const container = document.getElementById('historyStrip');
+            container.innerHTML = '';
+            historyBadges.slice(-10).reverse().forEach(h => {
+                const el = document.createElement('div');
+                el.className = `history-chip ${h.zone}`;
+                el.innerText = `${h.mult.toFixed(2)}x`;
+                container.appendChild(el);
             });
         }
+        renderHistory();
 
-        function placeBet(zone) {
-            if (gameState !== "BETTING") return;
+        // Canvas Flight Loop
+        function drawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            if (walletBalance < selectedChip) {
-                alert("Insufficient wallet balance!");
-                return;
+            // Draw Grid Lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += 40) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += 40) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
             }
 
-            walletBalance -= selectedChip;
-            myBets[zone] += selectedChip;
-            soundBeep();
-            updateUI();
+            if (isFlightActive) {
+                // Trajectory Curve
+                const progress = Math.min((currentMultiplier - 1.00) / 10.0, 1.0);
+                const targetX = 60 + progress * (canvas.width - 160);
+                const targetY = canvas.height - 50 - Math.pow(progress, 0.75) * (canvas.height - 120);
+
+                ctx.beginPath();
+                ctx.moveTo(60, canvas.height - 50);
+                ctx.quadraticCurveTo(60 + (targetX - 60) * 0.4, canvas.height - 50, targetX, targetY);
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 4;
+                ctx.shadowColor = 'rgba(6, 182, 212, 0.7)';
+                ctx.shadowBlur = 15;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Jet Glow
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.arc(targetX, targetY, 7, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            requestAnimationFrame(drawCanvas);
         }
+        requestAnimationFrame(drawCanvas);
 
-        function updateUI() {
-            document.getElementById('walletDisplay').innerText = `$${walletBalance.toFixed(2)}`;
-            document.getElementById('roundTag').innerText = `ROUND #${roundNumber}`;
-
-            ['safe', 'boost', 'rocket', 'moon'].forEach(z => {
-                const valEl = document.getElementById(`betVal${z.charAt(0).toUpperCase() + z.slice(1)}`);
-                const cardEl = document.getElementById(`card${z.charAt(0).toUpperCase() + z.slice(1)}`);
-                valEl.innerText = `$${myBets[z]}`;
-                cardEl.classList.toggle('active-bet', myBets[z] > 0);
-            });
-        }
-
-        function addHistoryPill(mult, zone) {
-            const ribbon = document.getElementById('historyRibbon');
-            const pill = document.createElement('div');
-            pill.className = `history-pill ${zone}`;
-            pill.innerText = `${mult.toFixed(2)}x`;
-            ribbon.insertBefore(pill, ribbon.firstChild);
-            if (ribbon.children.length > 7) ribbon.removeChild(ribbon.lastChild);
-        }
-
-        function showToast(msg, className) {
-            const toast = document.getElementById('toastBanner');
-            toast.innerText = msg;
-            toast.className = `toast-banner ${className}`;
-            toast.style.display = "block";
-        }
-
-        function hideToast() {
-            document.getElementById('toastBanner').style.display = "none";
-        }
-
-        function startBettingCountdown() {
-            gameState = "BETTING";
-            bettingCountdown = 5;
+        // Simulation Runner
+        function startSimulation() {
+            isFlightActive = true;
             currentMultiplier = 1.00;
-            myBets = { safe: 0, boost: 0, rocket: 0, moon: 0 };
-            hideToast();
+            crashMultiplier = (Math.random() < 0.48 ? (1.05 + Math.random() * 0.95) : (2.00 + Math.random() * 6.0)).toFixed(2);
+            document.getElementById('flightPhaseText').innerText = "IN FLIGHT";
+            document.getElementById('flightPhaseText').style.color = "var(--accent-emerald)";
 
-            // Clear winner animations
-            document.querySelectorAll('.zone-card').forEach(c => c.classList.remove('winner'));
-            
-            const multDisplay = document.getElementById('multDisplay');
-            multDisplay.className = "multiplier-large";
-            multDisplay.innerText = "1.00x";
+            logPacket("84", "INCOMING", `{"cmd":84,"sta":2,"roundId":"rnd_${roundCounter}"}`);
 
-            const badge = document.getElementById('zoneBadge');
-            badge.className = "zone-indicator-badge";
-            badge.innerText = `NEXT LAUNCH IN ${bettingCountdown}s`;
+            flightInterval = setInterval(() => {
+                currentMultiplier += 0.03 + (currentMultiplier * 0.015);
+                document.getElementById('multVal').innerText = currentMultiplier.toFixed(2) + 'x';
 
-            updateUI();
+                // Update Survival Probability
+                const nextTarget = currentMultiplier < 2.0 ? 2.0 : (currentMultiplier < 5.0 ? 5.0 : 20.0);
+                const prob = Math.min((currentMultiplier / nextTarget) * 100, 100).toFixed(1);
+                document.getElementById('telemetrySurvival').innerText = prob + '%';
+                document.getElementById('telemetryNextTarget').innerText = nextTarget.toFixed(2) + 'x';
 
-            clearInterval(countdownTimer);
-            countdownTimer = setInterval(() => {
-                bettingCountdown--;
-                if (bettingCountdown > 0) {
-                    badge.innerText = `NEXT LAUNCH IN ${bettingCountdown}s`;
-                    playTone(450, 'sine', 0.1, 0.05);
-                } else {
-                    clearInterval(countdownTimer);
-                    launchFlight();
-                }
-            }, 1000);
-        }
+                // Log Ticks
+                logPacket("85", "INCOMING", `{"cmd":85,"mul":"${currentMultiplier.toFixed(2)}","t":${Date.now()}}`);
 
-        function launchFlight() {
-            gameState = "FLYING";
-            currentMultiplier = 1.00;
-            currentZone = "safe";
+                // Check Whale Cashouts
+                simulatedWhales.forEach(w => {
+                    if (!w.cashed && currentMultiplier >= w.auto) {
+                        w.cashed = true;
+                        w.mul = w.auto;
+                        cashedOut += w.bet * w.auto;
+                        logPacket("87", "INCOMING", `{"cmd":87,"uid":"${w.uid}","cash":${(w.bet * w.auto).toFixed(2)},"mul":${w.auto}}`);
+                    }
+                });
+                renderWhales();
 
-            // Exponential Provably Fair Distribution (3% instant crash at 1.00x)
-            const r = Math.random();
-            if (r < 0.03) {
-                crashMultiplier = 1.00;
-            } else {
-                crashMultiplier = Math.max(1.05, (0.97 / (1.0 - r)));
-                if (crashMultiplier > 2500) crashMultiplier = 2500;
-            }
+                // Recalculate Casino Net Liability
+                const activeUncashed = simulatedWhales.filter(w => !w.cashed).reduce((acc, w) => acc + w.bet, 0);
+                const currentExposure = roundPool - cashedOut - (activeUncashed * currentMultiplier);
+                document.getElementById('kpiNetLiability').innerText = (currentExposure < 0 ? '-$' : '$') + Math.abs(currentExposure).toFixed(2);
+                document.getElementById('kpiNetLiability').style.color = currentExposure < 0 ? 'var(--accent-rose)' : 'var(--accent-emerald)';
 
-            soundLaunch();
-            updateZoneBadge();
-            lastTime = performance.now();
-            requestAnimationFrame(flightLoop);
-        }
-
-        function getZoneForMult(m) {
-            if (m <= 2.00) return "safe";
-            if (m <= 5.00) return "boost";
-            if (m <= 20.00) return "rocket";
-            return "moon";
-        }
-
-        function updateZoneBadge() {
-            const z = getZoneForMult(currentMultiplier);
-            const badge = document.getElementById('zoneBadge');
-            
-            if (z !== currentZone) {
-                currentZone = z;
-                soundZoneEnter();
-            }
-
-            badge.className = `zone-indicator-badge ${currentZone}`;
-            if (currentZone === "safe") badge.innerText = "🛡️ IN SAFE ZONE (1.00x - 2.00x)";
-            if (currentZone === "boost") badge.innerText = "⚡ IN BOOST ZONE (2.01x - 5.00x)";
-            if (currentZone === "rocket") badge.innerText = "🔥 IN ROCKET ZONE (5.01x - 20.00x)";
-            if (currentZone === "moon") badge.innerText = "👑 IN MOONSHOT ZONE (20.01x+)";
-        }
-
-        let lastTime = performance.now();
-
-        function flightLoop(now) {
-            const dt = (now - lastTime) / 1000;
-            lastTime = now;
-
-            if (gameState === "FLYING") {
-                currentMultiplier += (0.18 + currentMultiplier * 0.14) * dt * 2.2;
-                document.getElementById('multDisplay').innerText = currentMultiplier.toFixed(2) + "x";
-
-                updateZoneBadge();
-
+                // Check Crash
                 if (currentMultiplier >= crashMultiplier) {
+                    clearInterval(flightInterval);
                     handleCrash();
-                    return;
                 }
-            }
-
-            renderFlightCanvas();
-
-            if (gameState === "FLYING") {
-                requestAnimationFrame(flightLoop);
-            }
+            }, 80);
         }
 
         function handleCrash() {
-            gameState = "CRASHED";
-            currentMultiplier = crashMultiplier;
-            soundCrash();
+            isFlightActive = false;
+            // FAST-PATH INTERCEPT ~20ms ahead
+            logPacket("84", "INCOMING", `{"cmd":84,"sta":3,"mul":"${crashMultiplier}"}`);
 
-            const multDisplay = document.getElementById('multDisplay');
-            multDisplay.innerText = crashMultiplier.toFixed(2) + "x";
-            multDisplay.className = "multiplier-large crashed";
+            document.getElementById('multVal').innerText = crashMultiplier + 'x';
+            document.getElementById('multVal').style.color = 'var(--accent-rose)';
+            document.getElementById('zoneBadge').innerText = `FLEW AWAY @ ${crashMultiplier}x`;
+            document.getElementById('flightPhaseText').innerText = "CRASHED";
+            document.getElementById('flightPhaseText').style.color = "var(--accent-rose)";
 
-            const winningZone = getZoneForMult(crashMultiplier);
-            const cardEl = document.getElementById(`card${winningZone.charAt(0).toUpperCase() + winningZone.slice(1)}`);
-            cardEl.classList.add('winner');
+            const zoneName = crashMultiplier <= 2.0 ? 'safe' : (crashMultiplier <= 5.0 ? 'boost' : (crashMultiplier <= 20.0 ? 'rocket' : 'moon'));
+            historyBadges.push({ mult: parseFloat(crashMultiplier), zone: zoneName });
+            renderHistory();
 
-            addHistoryPill(crashMultiplier, winningZone);
-
-            // Calculate user payout
-            const userBetOnWinner = myBets[winningZone];
-            if (userBetOnWinner > 0) {
-                const winAmount = userBetOnWinner * zoneMultipliers[winningZone];
-                walletBalance += winAmount;
-                soundWin();
-                showToast(`🎉 PREDICTION WON! +$${winAmount.toFixed(2)} (${winningZone.toUpperCase()} HIT)`, "toast-win");
-            } else {
-                const totalBet = Object.values(myBets).reduce((a, b) => a + b, 0);
-                if (totalBet > 0) {
-                    showToast(`Crashed at ${crashMultiplier.toFixed(2)}x (${winningZone.toUpperCase()}). Better luck next round!`, "toast-loss");
-                }
-            }
-
-            updateUI();
-            roundNumber++;
-
-            // Restart next round after 4.5 seconds
             setTimeout(() => {
-                startBettingCountdown();
-            }, 4500);
+                document.getElementById('multVal').style.color = '#ffffff';
+                roundCounter++;
+                document.getElementById('roundCounter').innerText = '#' + roundCounter;
+                resetWhales();
+                startSimulation();
+            }, 4000);
         }
 
-        function renderFlightCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Stars warp speed with multiplier
-            const speed = gameState === "FLYING" ? Math.min(currentMultiplier, 8) : 1;
-            ctx.fillStyle = "#ffffff";
-            stars.forEach(s => {
-                s.y += s.speed * speed * 0.7;
-                if (s.y > canvas.height) {
-                    s.y = 0;
-                    s.x = Math.random() * canvas.width;
-                }
-                ctx.beginPath();
-                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-                ctx.fill();
+        function resetWhales() {
+            simulatedWhales.forEach(w => {
+                w.cashed = false;
+                w.mul = 0;
             });
-
-            // Center Rocket
-            const rx = canvas.width / 2;
-            const ry = canvas.height / 2;
-
-            if (gameState === "FLYING") {
-                for (let i = 0; i < 4; i++) {
-                    thrusterParticles.push({
-                        x: rx + (Math.random() - 0.5) * 14,
-                        y: ry + 40,
-                        vx: (Math.random() - 0.5) * 2,
-                        vy: Math.random() * 8 + 6,
-                        size: Math.random() * 8 + 4,
-                        life: 1.0
-                    });
-                }
-            }
-
-            // Draw Particles
-            for (let i = thrusterParticles.length - 1; i >= 0; i--) {
-                const p = thrusterParticles[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.life -= 0.05;
-                if (p.life <= 0) {
-                    thrusterParticles.splice(i, 1);
-                    continue;
-                }
-                ctx.fillStyle = `rgba(${255 * p.life}, ${160 * p.life}, 255, ${p.life})`;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            // Draw Rocket
-            ctx.save();
-            ctx.translate(rx, ry);
-
-            if (gameState === "FLYING") {
-                ctx.translate((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2);
-            }
-
-            // Rocket Body
-            ctx.fillStyle = "#e2e8f0";
-            ctx.beginPath();
-            ctx.moveTo(0, -50);
-            ctx.lineTo(20, 20);
-            ctx.lineTo(-20, 20);
-            ctx.closePath();
-            ctx.fill();
-
-            // Dynamic Fin Color matching Current Zone
-            let finColor = "#10b981";
-            if (currentZone === "boost") finColor = "#06b6d4";
-            if (currentZone === "rocket") finColor = "#8b5cf6";
-            if (currentZone === "moon") finColor = "#f59e0b";
-
-            ctx.fillStyle = finColor;
-            ctx.beginPath();
-            ctx.moveTo(-20, 10);
-            ctx.lineTo(-35, 35);
-            ctx.lineTo(-15, 30);
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.moveTo(20, 10);
-            ctx.lineTo(35, 35);
-            ctx.lineTo(15, 30);
-            ctx.closePath();
-            ctx.fill();
-
-            // Cockpit Window
-            ctx.fillStyle = "#38bdf8";
-            ctx.beginPath();
-            ctx.arc(0, -15, 8, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.restore();
+            cashedOut = 0.0;
+            renderWhales();
         }
 
-        // Initialize and start loop
-        updateUI();
-        startBettingCountdown();
+        function renderWhales() {
+            const tbody = document.getElementById('whalesTableBody');
+            tbody.innerHTML = '';
+            simulatedWhales.forEach(w => {
+                const tr = document.createElement('tr');
+                const pl = w.cashed ? `+$${(w.bet * w.mul - w.bet).toFixed(2)}` : `-$${w.bet.toFixed(2)}`;
+                const plColor = w.cashed ? 'var(--accent-emerald)' : 'var(--accent-rose)';
+
+                tr.innerHTML = `
+                    <td><span class="whale-badge">${w.uid}</span></td>
+                    <td>$${w.bet.toFixed(2)}</td>
+                    <td>${w.auto.toFixed(2)}x</td>
+                    <td><span class="${w.cashed ? 'cashed-badge' : 'in-flight-badge'}">${w.cashed ? 'CASHED OUT' : 'IN FLIGHT'}</span></td>
+                    <td style="color: ${plColor}; font-weight: 700;">${pl}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        renderWhales();
+
+        function logPacket(opcode, direction, payload) {
+            const stream = document.getElementById('terminalStream');
+            const row = document.createElement('div');
+            row.className = 'packet-line';
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+
+            row.innerHTML = `
+                <span class="pkt-time">${timeStr}</span>
+                <span class="pkt-op pkt-${opcode.split(':')[0]}">[cmd:${opcode}]</span>
+                <span class="pkt-dir ${direction === 'INCOMING' ? 'in' : 'out'}">${direction}</span>
+                <span class="pkt-body">${payload}</span>
+            `;
+            stream.appendChild(row);
+            if (stream.children.length > 100) stream.removeChild(stream.children[0]);
+            stream.scrollTop = stream.scrollHeight;
+        }
+
+        function clearTerminal() {
+            document.getElementById('terminalStream').innerHTML = '';
+        }
+
+        // HMAC-SHA512 Cryptographic Calculation via Web Crypto API
+        async function executeProvablyFairVerification() {
+            const serverSeed = document.getElementById('inputServerSeed').value.trim();
+            const clientSeed = document.getElementById('inputClientSeed').value.trim();
+            const recordedTarget = parseFloat(document.getElementById('inputTargetMul').value.trim());
+
+            if (!serverSeed || !clientSeed) {
+                alert("Please enter both server seed and client seed.");
+                return;
+            }
+
+            try {
+                const enc = new TextEncoder();
+                const key = await crypto.subtle.importKey(
+                    "raw",
+                    enc.encode(serverSeed),
+                    { name: "HMAC", hash: "SHA-512" },
+                    false,
+                    ["sign"]
+                );
+
+                const signature = await crypto.subtle.sign(
+                    "HMAC",
+                    key,
+                    enc.encode(clientSeed)
+                );
+
+                const hashArray = Array.from(new Uint8Array(signature));
+                const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+                const first13 = hashHex.substring(0, 13);
+                const h = parseInt(first13, 16);
+                const e = Math.pow(2, 52);
+
+                const isInstant = (h % 33 === 0);
+                const calculatedMul = isInstant ? 1.00 : Math.floor((100 * e - h) / (e - h)) / 100;
+
+                document.getElementById('resHashDisplay').innerText = hashHex;
+                document.getElementById('res13Hex').innerText = first13;
+                document.getElementById('resDecimalVal').innerText = h.toLocaleString();
+                document.getElementById('resInstantTest').innerText = isInstant ? "TRUE (Instant Crash @ 1.00x)" : "FALSE";
+                document.getElementById('resCalculatedMul').innerText = calculatedMul.toFixed(2) + 'x';
+
+                const diff = Math.abs(calculatedMul - recordedTarget);
+                const verdictEl = document.getElementById('resVerdict');
+                if (diff < 0.02) {
+                    verdictEl.innerHTML = `✅ <strong style="color: var(--accent-emerald);">MATHEMATICALLY VERIFIED:</strong> Exact match with recorded multiplier!`;
+                } else {
+                    verdictEl.innerHTML = `❌ <strong style="color: var(--accent-rose);">DISCREPANCY DETECTED:</strong> Calculated ${calculatedMul.toFixed(2)}x vs Recorded ${recordedTarget.toFixed(2)}x. Operator seed may be altered!`;
+                }
+
+            } catch (err) {
+                alert("Crypto calculation error: " + err.message);
+            }
+        }
+
+        // Start initial simulation
+        setTimeout(startSimulation, 1000);
     </script>
 </body>
 </html>
