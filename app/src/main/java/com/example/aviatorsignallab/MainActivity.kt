@@ -270,35 +270,53 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         viewModel.preCrashAlert.observe(this) { alert ->
             if (alert != null && alert.active) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
-                val isFreeze = alert.reason.contains("FREEZE")
-                val isExactCrash = alert.reason.contains("FLEW_AWAY")
-                val isFastPath = alert.reason.contains("FAST_CRASH_SIGNAL")
-                if (isFreeze) {
-                    val gap = alert.reason.substringAfter("FREEZE_").substringBefore("ms")
-                    binding.tvAlertTitle.text = "⚡ FINAL EXIT @ %.2fx".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "Cadence Silent (${gap}ms) • Cash Out Now"
-                    binding.tvBubbleStatus.text = "⚡EXIT!"
-                } else if (isFastPath) {
-                    binding.tvAlertTitle.text = "⚡ FINAL EXIT @ %.2fx".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "WebSocket Fast-Path Crash Intercepted"
-                    binding.tvBubbleStatus.text = "⚡EXIT!"
-                } else if (isExactCrash) {
-                    binding.tvAlertTitle.text = "FLEW AWAY @ %.2fx".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "Exact Crash Instant • Round Concluded"
-                    binding.tvBubbleStatus.text = "CRASH!"
+
+                if (alert.confidence == "PREPARE") {
+                    // STAGE 1: PREPARE ADVISORY (Amber Glow)
+                    binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_prepare_alert)
+                    binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_amber))
+                    binding.tvAlertTitle.text = "⚡ PREPARE TO CASH OUT (%.2fx)".format(alert.multiplier)
+                    binding.tvAlertSubtitle.text = "High Multiplier Zone • Hover Finger Over Cash Out"
+                    binding.tvBubbleStatus.text = "⚡READY"
+                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
+                    binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
+                    binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
+
+                    triggerPrepareVibration()
                 } else {
-                    binding.tvAlertTitle.text = "⚡ FINAL EXIT @ %.2fx".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "Signal: ${alert.reason}"
-                    binding.tvBubbleStatus.text = "⚡EXIT!"
+                    // STAGE 2: FINAL CASH OUT (Crimson / Rose — Priority 1)
+                    binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
+                    binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
+                    val isFreeze = alert.reason.contains("FREEZE")
+                    val isExactCrash = alert.reason.contains("FLEW_AWAY")
+                    val isFastPath = alert.reason.contains("FAST_CRASH_SIGNAL")
+                    if (isFreeze) {
+                        val gap = alert.reason.substringAfter("FREEZE_").substringBefore("ms")
+                        binding.tvAlertTitle.text = "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
+                        binding.tvAlertSubtitle.text = "Cadence Silent (${gap}ms) • Tap Cash Out Now!"
+                        binding.tvBubbleStatus.text = "⚡EXIT!"
+                    } else if (isFastPath) {
+                        binding.tvAlertTitle.text = "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
+                        binding.tvAlertSubtitle.text = "WebSocket Fast-Path Crash Intercepted"
+                        binding.tvBubbleStatus.text = "⚡EXIT!"
+                    } else if (isExactCrash) {
+                        binding.tvAlertTitle.text = "FLEW AWAY @ %.2fx".format(alert.multiplier)
+                        binding.tvAlertSubtitle.text = "Exact Crash Instant • Round Concluded"
+                        binding.tvBubbleStatus.text = "CRASH!"
+                    } else {
+                        binding.tvAlertTitle.text = "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
+                        binding.tvAlertSubtitle.text = "Signal: ${alert.reason}"
+                        binding.tvBubbleStatus.text = "⚡EXIT!"
+                    }
+
+                    // Urgent double haptic vibration
+                    triggerImmediateVibration()
+
+                    // Highlight multiplier in intense crash rose
+                    binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                    binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 }
-
-                // Instant Haptic Vibration
-                triggerImmediateVibration()
-
-                // Highlight multiplier in intense crash rose
-                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-                binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-                binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
             } else {
                 binding.bannerPreCrashAlert.visibility = View.GONE
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
@@ -307,6 +325,26 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
             }
         }
+    }
+
+    private fun triggerPrepareVibration() {
+        try {
+            val timings = longArrayOf(0L, 90L)
+            val amplitudes = intArrayOf(0, 160)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                vibratorManager?.defaultVibrator?.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(90L)
+                }
+            }
+        } catch (e: Exception) {}
     }
 
     private fun triggerImmediateVibration() {
