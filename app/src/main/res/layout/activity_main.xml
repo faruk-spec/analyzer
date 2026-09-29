@@ -49,7 +49,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/app_name"
                     android:textColor="@color/text_primary"
-                    android:textSize="14sp"
+                    android:textSize="13sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -58,7 +58,44 @@
                     android:layout_height="wrap_content"
                     android:text="@string/target_website_label"
                     android:textColor="@color/accent_cyan"
-                    android:textSize="10sp" />
+                    android:textSize="9sp" />
+            </LinearLayout>
+
+            <!-- Mode Segmented Switch: Aviator vs WinGo -->
+            <LinearLayout
+                android:id="@+id/segmentedModeToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_toggle_unselected"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="2dp">
+
+                <TextView
+                    android:id="@+id/btnModeAviator"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="✈️ Aviator"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnModeWingo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_toggle_selected"
+                    android:gravity="center"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="🎯 WinGo"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <!-- Status Pill Badge -->
@@ -114,13 +151,236 @@
                 app:tint="@color/accent_cyan" />
         </LinearLayout>
 
-        <!-- Real-Time Metrics Strip (Collapsible via Bubble Mode) -->
+        <!-- Persistent WinGo Top HUD Strip (Always on Top of WebView) -->
+        <HorizontalScrollView
+            android:id="@+id/wingoTopHudStrip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#091124"
+            android:scrollbars="none"
+            android:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="6dp">
+
+                <!-- Room Selector Pills -->
+                <LinearLayout
+                    android:id="@+id/wingoRoomSelectorContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/chipWingo30s"
+                        android:layout_width="wrap_content"
+                        android:layout_height="26dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_toggle_selected"
+                        android:gravity="center"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="30s"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/chipWingo1m"
+                        android:layout_width="wrap_content"
+                        android:layout_height="26dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_toggle_unselected"
+                        android:gravity="center"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="1Min"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/chipWingo3m"
+                        android:layout_width="wrap_content"
+                        android:layout_height="26dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_toggle_unselected"
+                        android:gravity="center"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="3Min"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/chipWingo5m"
+                        android:layout_width="wrap_content"
+                        android:layout_height="26dp"
+                        android:background="@drawable/bg_toggle_unselected"
+                        android:gravity="center"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="5Min"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@color/bg_card_border" />
+
+                <!-- Period Chip -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_metric_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
+                        android:text="PERIOD"
+                        android:textColor="@color/text_muted"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvWingoPeriod"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="------------"
+                        android:textColor="@color/accent_cyan"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Digital Countdown Timer Box -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_timer_box"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="3dp">
+
+                    <TextView
+                        android:id="@+id/tvWingoCountdown"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:fontFamily="sans-serif-black"
+                        android:text="00:00"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/tvWingoLockBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_pill_badge"
+                        android:paddingStart="5dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="5dp"
+                        android:paddingBottom="2dp"
+                        android:text="OPEN"
+                        android:textColor="@color/wingo_green"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Latest Drawn Ball Chip -->
+                <LinearLayout
+                    android:id="@+id/layoutWingoLatestBall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_metric_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:text="RESULT"
+                        android:textColor="@color/text_muted"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvWingoLastBall"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_wingo_ball"
+                        android:gravity="center"
+                        android:text="-"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvWingoLastSize"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_pill_badge"
+                        android:paddingStart="6dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="2dp"
+                        android:text="--"
+                        android:textColor="@color/wingo_big"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Dragon Streak Chip -->
+                <TextView
+                    android:id="@+id/tvWingoStreakBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_status_badge"
+                    android:paddingStart="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="4dp"
+                    android:text="🐉 5x BIG"
+                    android:textColor="@color/wingo_dragon"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- Real-Time Aviator Metrics Strip (Collapsible via Bubble Mode) -->
         <HorizontalScrollView
             android:id="@+id/metricsStrip"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#0F1626"
-            android:scrollbars="none">
+            android:scrollbars="none"
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -456,6 +716,75 @@
                     android:paddingEnd="10dp"
                     android:paddingBottom="5dp"
                     android:text="CASH OUT"
+                    android:textColor="#B91C1C"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- WinGo Alert HUD Banner (Dragon Streak / Lock Warning) -->
+            <LinearLayout
+                android:id="@+id/bannerWingoAlert"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top"
+                android:layout_marginStart="14dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="14dp"
+                android:background="@drawable/bg_pre_crash_alert"
+                android:elevation="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="10dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/ivWingoAlertIcon"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_marginEnd="10dp"
+                    android:contentDescription="Dragon Alert"
+                    android:src="@drawable/ic_warning"
+                    app:tint="@color/wingo_dragon" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvWingoAlertTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-black"
+                        android:text="🐉 DRAGON STREAK DETECTED"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvWingoAlertSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="5x consecutive BIG on WinGo 30s"
+                        android:textColor="#FEE2E2"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvWingoAlertAction"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_alert_action_pill"
+                    android:paddingStart="10dp"
+                    android:paddingTop="5dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="5dp"
+                    android:text="VIEW RADAR"
                     android:textColor="#B91C1C"
                     android:textSize="11sp"
                     android:textStyle="bold" />

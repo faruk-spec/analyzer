@@ -124,11 +124,40 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     val recentDisassembledPackets: LiveData<List<ServerReverseEngine.DisassembledPacket>> = _recentDisassembledPackets
     private val packetDisassemblyBuffer = mutableListOf<ServerReverseEngine.DisassembledPacket>()
 
+    // App Mode Toggle: AVIATOR vs WINGO
+    enum class AppMode { AVIATOR, WINGO }
+
+    private val _appMode = MutableLiveData(AppMode.WINGO)
+    val appMode: LiveData<AppMode> = _appMode
+
+    fun setAppMode(mode: AppMode) {
+        _appMode.postValue(mode)
+    }
+
     // WinGo / BigSmall Lottery Protocol Engine & LiveData
+    private val _activeWingoRoom = MutableLiveData(WingoProtocolEngine.WingoRoom.WINGO_30S)
+    val activeWingoRoom: LiveData<WingoProtocolEngine.WingoRoom> = _activeWingoRoom
+
+    fun setWingoRoom(room: WingoProtocolEngine.WingoRoom) {
+        _activeWingoRoom.postValue(room)
+        wingoEngine.setActiveRoom(room)
+        val state = wingoEngine.getActiveRoomState()
+        val issue = WingoProtocolEngine.WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
+        _wingoIssue.postValue(issue)
+        _wingoHistory.postValue(state.history.toList())
+        _wingoTrendSummary.postValue(state.trendSummary)
+        _wingoTransitions.postValue(state.transitions)
+        if (state.history.isNotEmpty()) {
+            _latestWingoDraw.postValue(state.history.first())
+        }
+    }
+
     private val _latestWingoDraw = MutableLiveData<WingoProtocolEngine.WingoDrawResult?>()
     val latestWingoDraw: LiveData<WingoProtocolEngine.WingoDrawResult?> = _latestWingoDraw
 
-    private val _wingoIssue = MutableLiveData(WingoProtocolEngine.WingoIssueInfo("--", 0, false, "1m"))
+    private val _wingoIssue = MutableLiveData(
+        WingoProtocolEngine.WingoIssueInfo("--", 0, false, WingoProtocolEngine.WingoRoom.WINGO_30S)
+    )
     val wingoIssue: LiveData<WingoProtocolEngine.WingoIssueInfo> = _wingoIssue
 
     private val _wingoHistory = MutableLiveData<List<WingoProtocolEngine.WingoDrawResult>>(emptyList())
@@ -142,14 +171,19 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     val wingoEngine: WingoProtocolEngine = WingoProtocolEngine(object : WingoProtocolEngine.WingoListener {
         override fun onNewDrawResult(result: WingoProtocolEngine.WingoDrawResult, history: List<WingoProtocolEngine.WingoDrawResult>) {
-            _latestWingoDraw.postValue(result)
-            _wingoHistory.postValue(history)
-            _wingoTrendSummary.postValue(WingoTrendAnalyzer.analyzeTrends(history))
-            _wingoTransitions.postValue(WingoTrendAnalyzer.calculateTransitions(history))
+            val targetRoom = WingoProtocolEngine.WingoRoom.fromPeriodId(result.periodId)
+            if (targetRoom == null || targetRoom == _activeWingoRoom.value) {
+                _latestWingoDraw.postValue(result)
+                _wingoHistory.postValue(history)
+                _wingoTrendSummary.postValue(WingoTrendAnalyzer.analyzeTrends(history))
+                _wingoTransitions.postValue(WingoTrendAnalyzer.calculateTransitions(history))
+            }
         }
 
         override fun onIssueUpdated(issue: WingoProtocolEngine.WingoIssueInfo) {
-            _wingoIssue.postValue(issue)
+            if (issue.room == _activeWingoRoom.value) {
+                _wingoIssue.postValue(issue)
+            }
         }
 
         override fun onHistoryLoaded(results: List<WingoProtocolEngine.WingoDrawResult>) {
@@ -158,6 +192,24 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             _wingoTransitions.postValue(WingoTrendAnalyzer.calculateTransitions(results))
             if (results.isNotEmpty()) {
                 _latestWingoDraw.postValue(results.first())
+            }
+        }
+
+        override fun onRoomUpdated(
+            room: WingoProtocolEngine.WingoRoom,
+            issue: WingoProtocolEngine.WingoIssueInfo,
+            history: List<WingoProtocolEngine.WingoDrawResult>,
+            trend: WingoTrendAnalyzer.TrendSummary,
+            trans: WingoTrendAnalyzer.TransitionProbabilities
+        ) {
+            if (room == _activeWingoRoom.value) {
+                _wingoIssue.postValue(issue)
+                _wingoHistory.postValue(history)
+                _wingoTrendSummary.postValue(trend)
+                _wingoTransitions.postValue(trans)
+                if (history.isNotEmpty()) {
+                    _latestWingoDraw.postValue(history.first())
+                }
             }
         }
     })
@@ -187,6 +239,14 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     // Stage 1 Prepare Alert guard: tracks if advisory alert fired for current round
     private val prepareAlertFiredForRound = AtomicBoolean(false)
 
+    // WinGo autonomous engine jobs
+    private var wingoTickerJob: Job? = null
+    private var wingoCdnPollerJob: Job? = null
+    private val httpClient = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     // Diagnostics counters
     var wsCount = 0
     var fetchCount = 0
@@ -198,6 +258,62 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         loadInitialStats()
         startTicker()
         startRiskMonitor()
+        startWingoEngine()
+    }
+
+    private fun startWingoEngine() {
+        // 1. High-precision UTC second-by-second countdown ticker for all 4 rooms
+        wingoTickerJob = viewModelScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                try {
+                    val nowUtc = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+                    val dateStr = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd").format(nowUtc)
+                    val totalSeconds = nowUtc.hour * 3600 + nowUtc.minute * 60 + nowUtc.second
+
+                    for (room in WingoProtocolEngine.WingoRoom.values()) {
+                        val cycle = room.cycleSeconds
+                        val seq = (totalSeconds / cycle) + 1
+                        val remaining = cycle - (totalSeconds % cycle)
+                        val isLocked = remaining <= 5
+                        val periodId = "$dateStr${room.idPattern}" + String.format(java.util.Locale.US, "%04d", seq)
+                        wingoEngine.updateRoomIssue(room, periodId, remaining, isLocked)
+                    }
+                } catch (e: Exception) {
+                    // Safety guard
+                }
+                delay(1000L)
+            }
+        }
+
+        // 2. High-speed background CDN poller for official lottery results across all 4 rooms
+        wingoCdnPollerJob = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                try {
+                    val active = _activeWingoRoom.value ?: WingoProtocolEngine.WingoRoom.WINGO_30S
+                    val rooms = listOf(active) + WingoProtocolEngine.WingoRoom.values().filter { it != active }
+
+                    for (room in rooms) {
+                        try {
+                            val url = "https://draw.ar-lottery06.com/WinGo/${room.roomCode}/GetHistoryIssuePage.json"
+                            val req = okhttp3.Request.Builder()
+                                .url(url)
+                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                                .build()
+                            val resp = httpClient.newCall(req).execute()
+                            val body = resp.body?.string()
+                            if (!body.isNullOrEmpty()) {
+                                wingoEngine.processPayload("CDN", url, body)
+                            }
+                        } catch (e: Exception) {
+                            // Retry next cycle
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Safe guard
+                }
+                delay(3000L)
+            }
+        }
     }
 
     private fun loadInitialStats() {
@@ -312,8 +428,17 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _betTelemetry.postValue(telemetry)
 
         // Process WinGo / BigSmall payloads if present
-        if (wingoEngine.isWingoTraffic(item.payload, safePayload)) {
-            wingoEngine.processPayload(transport, item.payload, safePayload)
+        var requestUrl = transport
+        if (safePayload.contains("\"__url\"")) {
+            try {
+                val match = Regex("\"__url\"\\s*:\\s*\"([^\"]+)\"").find(safePayload)
+                if (match != null) {
+                    requestUrl = match.groupValues[1]
+                }
+            } catch (e: Exception) {}
+        }
+        if (wingoEngine.isWingoTraffic(requestUrl, safePayload) || transport == "WINGO_DOM") {
+            wingoEngine.processPayload(transport, requestUrl, safePayload)
         }
 
         // Real-time tick feed: record live multiplier ticks into LiveTickCadenceAnalyzer
@@ -646,5 +771,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         super.onCleared()
         tickerJob?.cancel()
         riskMonitorJob?.cancel()
+        wingoTickerJob?.cancel()
+        wingoCdnPollerJob?.cancel()
     }
 }

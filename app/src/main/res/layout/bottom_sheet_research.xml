@@ -20,7 +20,7 @@
         android:layout_marginBottom="12dp"
         android:background="@color/text_muted" />
 
-    <!-- Sheet Header -->
+    <!-- Sheet Header with Mode Switcher -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -28,27 +28,52 @@
         android:orientation="horizontal"
         android:layout_marginBottom="12dp">
 
-        <TextView
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="34dp"
             android:layout_weight="1"
-            android:text="Scientific Research Panel"
-            android:textColor="@color/text_primary"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:background="@drawable/bg_toggle_unselected"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="2dp">
+
+            <TextView
+                android:id="@+id/btnSheetTabWingo"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle_selected"
+                android:gravity="center"
+                android:text="🎯 WinGo Intelligence"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnSheetTabAviator"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="✈️ Aviator Research"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tvSheetRoundsAnalyzed"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="0 crash rounds"
+            android:layout_marginStart="8dp"
+            android:text="Live Sync"
             android:textColor="@color/accent_cyan"
-            android:textSize="12sp" />
+            android:textSize="11sp" />
     </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="420dp"
+        android:layout_height="440dp"
         android:fillViewport="true">
 
         <LinearLayout
@@ -56,307 +81,814 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Activity Signal Card -->
+            <!-- ================= WINGO INTELLIGENCE SECTION ================= -->
             <LinearLayout
+                android:id="@+id/layoutSheetWingo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_card"
-                android:backgroundTint="@color/bg_secondary"
                 android:orientation="vertical"
-                android:padding="14dp"
-                android:layout_marginBottom="14dp">
+                android:visibility="visible">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ACTIVITY SIGNAL (T-0.1s to T-5.0s PRE-CRASH)"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvSignalConclusion"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="@string/sig_no_signal"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvSignalDetails"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Scientific verification: Testing pre-crash network activity vs random live control periods."
-                    android:textColor="@color/text_muted"
-                    android:textSize="12sp" />
-
-                <!-- Verification Stats Table -->
+                <!-- Room Selector Tabs -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginTop="12dp">
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:id="@+id/sheetChipWingo30s"
+                        android:layout_width="0dp"
+                        android:layout_height="32dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_toggle_selected"
+                        android:gravity="center"
+                        android:text="30s"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/sheetChipWingo1m"
+                        android:layout_width="0dp"
+                        android:layout_height="32dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_toggle_unselected"
+                        android:gravity="center"
+                        android:text="1Min"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/sheetChipWingo3m"
+                        android:layout_width="0dp"
+                        android:layout_height="32dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_toggle_unselected"
+                        android:gravity="center"
+                        android:text="3Min"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/sheetChipWingo5m"
+                        android:layout_width="0dp"
+                        android:layout_height="32dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_toggle_unselected"
+                        android:gravity="center"
+                        android:text="5Min"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Room Hero Status Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card"
+                    android:backgroundTint="@color/bg_secondary"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:layout_marginBottom="10dp">
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvSheetWingoRoomName"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="WinGo 30s"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvSheetWingoPeriod"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="monospace"
+                                android:text="Period: -------------"
+                                android:textColor="@color/accent_cyan"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <!-- Live Countdown + Lock Status -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_timer_box"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="10dp"
+                            android:paddingTop="5dp"
+                            android:paddingEnd="10dp"
+                            android:paddingBottom="5dp">
+
+                            <TextView
+                                android:id="@+id/tvSheetWingoCountdown"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="6dp"
+                                android:fontFamily="sans-serif-black"
+                                android:text="00:00"
+                                android:textColor="#FFFFFF"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:id="@+id/tvSheetWingoLock"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_pill_badge"
+                                android:paddingStart="6dp"
+                                android:paddingTop="2dp"
+                                android:paddingEnd="6dp"
+                                android:paddingBottom="2dp"
+                                android:text="OPEN"
+                                android:textColor="@color/wingo_green"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Latest Result Snapshot -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="10dp">
+
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Out-of-Sample Prec"
-                            android:textColor="@color/text_muted"
-                            android:textSize="10sp" />
+                            android:text="Latest Draw: "
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+
                         <TextView
-                            android:id="@+id/tvOutOfSamplePrec"
+                            android:id="@+id/tvSheetWingoBall"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/bg_wingo_ball"
+                            android:gravity="center"
+                            android:text="-"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSheetWingoSize"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="0.00"
+                            android:background="@drawable/bg_pill_badge"
+                            android:paddingStart="8dp"
+                            android:paddingTop="3dp"
+                            android:paddingEnd="8dp"
+                            android:paddingBottom="3dp"
+                            android:text="--"
+                            android:textColor="@color/wingo_big"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSheetWingoColor"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:background="@drawable/bg_pill_badge"
+                            android:paddingStart="8dp"
+                            android:paddingTop="3dp"
+                            android:paddingEnd="8dp"
+                            android:paddingBottom="3dp"
+                            android:text="--"
                             android:textColor="@color/text_primary"
-                            android:textSize="13sp"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Dragon Streak Alert Card -->
+                <LinearLayout
+                    android:id="@+id/cardSheetDragon"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card"
+                    android:backgroundTint="#1F1322"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:id="@+id/tvSheetDragonTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🐉 DRAGON STREAK RADAR"
+                        android:textColor="@color/wingo_dragon"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvSheetDragonDetails"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="No abnormal streak (dragon threshold >= 5 consecutive parity outcomes)."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Big / Small Ratio & Parity Balance -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card"
+                    android:backgroundTint="@color/bg_secondary"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:layout_marginBottom="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="BIG / SMALL DISTRIBUTION"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSheetBigPercent"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="BIG 50%"
+                            android:textColor="@color/wingo_big"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:layout_marginEnd="4dp"
+                            android:text="•"
+                            android:textColor="@color/text_muted" />
+
+                        <TextView
+                            android:id="@+id/tvSheetSmallPercent"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="SMALL 50%"
+                            android:textColor="@color/wingo_small"
+                            android:textSize="11sp"
                             android:textStyle="bold" />
                     </LinearLayout>
 
-                    <LinearLayout
-                        android:layout_width="0dp"
+                    <ProgressBar
+                        android:id="@+id/progressSheetBigSmall"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="6dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:max="100"
+                        android:progress="50"
+                        android:progressTint="@color/wingo_big"
+                        android:progressBackgroundTint="@color/wingo_small" />
+
+                    <TextView
+                        android:id="@+id/tvSheetStatCounts"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-                        <TextView
-                            android:layout_width="wrap_content"
+                        android:text="Big: 0 | Small: 0 | Green: 0 | Red: 0 | Violet: 0"
+                        android:textColor="@color/text_muted"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <!-- Markov Parity Transition Matrix Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card"
+                    android:backgroundTint="@color/bg_secondary"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MARKOV PARITY TRANSITION MATRIX"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:text="False Positive Rate"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="P(Big → Big)"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:id="@+id/tvSheetTransBB"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="50.0%"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="P(Big → Small)"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:id="@+id/tvSheetTransBS"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="50.0%"
+                                android:textColor="@color/accent_cyan"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="P(Small → Small)"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:id="@+id/tvSheetTransSS"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="50.0%"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="P(Small → Big)"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:id="@+id/tvSheetTransSB"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="50.0%"
+                                android:textColor="@color/accent_purple"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvSheetWingoPrediction"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_pill_badge"
+                        android:padding="6dp"
+                        android:text="Next Round Transition: Neutral Parity"
+                        android:textColor="@color/accent_emerald"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Live History Table (Matching Screenshot) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card"
+                    android:backgroundTint="@color/bg_secondary"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="RECENT ROOM DRAWS"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Table Header Row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingBottom="6dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1.2"
+                            android:text="Period"
                             android:textColor="@color/text_muted"
-                            android:textSize="10sp" />
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
                         <TextView
-                            android:id="@+id/tvFalsePositiveRate"
-                            android:layout_width="wrap_content"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:text="0.0%"
-                            android:textColor="@color/accent_rose"
-                            android:textSize="13sp"
+                            android:layout_weight="0.8"
+                            android:text="Number"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="0.8"
+                            android:text="Big/Small"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="0.8"
+                            android:text="Color"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp"
                             android:textStyle="bold" />
                     </LinearLayout>
 
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/bg_card_border"
+                        android:layout_marginBottom="6dp" />
+
+                    <!-- Dynamic Table Rows Container -->
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:id="@+id/llSheetWingoHistoryTable"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Confidence"
-                            android:textColor="@color/text_muted"
-                            android:textSize="10sp" />
-                        <TextView
-                            android:id="@+id/tvConfidenceLevel"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="LOW"
-                            android:textColor="@color/text_muted"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
+                        android:orientation="vertical" />
 
                 </LinearLayout>
 
             </LinearLayout>
 
-            <!-- Deep Server Reverse Engineering Tools -->
+
+            <!-- ================= AVIATOR RESEARCH SECTION ================= -->
             <LinearLayout
+                android:id="@+id/layoutSheetAviator"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
+                android:orientation="vertical"
+                android:visibility="gone">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSheetBetExposure"
-                    android:layout_width="0dp"
+                <!-- Activity Signal Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
-                    android:text="📊 Bet Volume &amp; Risk"
-                    android:textSize="11sp"
-                    android:textColor="@color/accent_cyan"
+                    android:background="@drawable/bg_card"
+                    android:backgroundTint="@color/bg_secondary"
+                    android:orientation="vertical"
+                    android:padding="14dp"
+                    android:layout_marginBottom="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ACTIVITY SIGNAL (T-0.1s to T-5.0s PRE-CRASH)"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvSignalConclusion"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/sig_no_signal"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvSignalDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Scientific verification: Testing pre-crash network activity vs random live control periods."
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <!-- Verification Stats Table -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Out-of-Sample Prec"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:id="@+id/tvOutOfSamplePrec"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.00"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="False Positive Rate"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:id="@+id/tvFalsePositiveRate"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.0%"
+                                android:textColor="@color/accent_rose"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Confidence"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:id="@+id/tvConfidenceLevel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="LOW"
+                                android:textColor="@color/text_muted"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Deep Server Reverse Engineering Tools -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSheetBetExposure"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:text="📊 Bet Volume &amp; Risk"
+                        android:textSize="11sp"
+                        android:textColor="@color/accent_cyan"
+                        app:backgroundTint="@color/bg_secondary"
+                        app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSheetProvablyFair"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="6dp"
+                        android:text="🔐 SHA-512 Verifier"
+                        android:textSize="11sp"
+                        android:textColor="@color/accent_purple"
+                        app:backgroundTint="@color/bg_secondary"
+                        app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+                </LinearLayout>
+
+                <!-- Quick Controls (Reload, Pause/Resume) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="10dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSheetReload"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:text="@string/btn_reload"
+                        android:textColor="@color/text_primary"
+                        app:backgroundTint="@color/bg_secondary"
+                        app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSheetPauseResume"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="6dp"
+                        android:text="@string/btn_pause"
+                        android:textColor="@color/text_primary"
+                        app:backgroundTint="@color/bg_secondary"
+                        app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+                </LinearLayout>
+
+                <!-- Export Buttons Grid -->
+                <GridLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:columnCount="2"
+                    android:rowCount="2"
+                    android:layout_marginBottom="10dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnExportRoundsCsv"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_columnWeight="1"
+                        android:layout_marginEnd="4dp"
+                        android:layout_marginBottom="6dp"
+                        android:text="@string/btn_rounds_csv"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_primary"
+                        app:backgroundTint="@color/bg_card"
+                        app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnExportEventsCsv"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_columnWeight="1"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginBottom="6dp"
+                        android:text="@string/btn_events_csv"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_primary"
+                        app:backgroundTint="@color/bg_card"
+                        app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnExportFeaturesCsv"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_columnWeight="1"
+                        android:layout_marginEnd="4dp"
+                        android:text="@string/btn_features_csv"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_primary"
+                        app:backgroundTint="@color/bg_card"
+                        app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnExportProtocolCsv"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_columnWeight="1"
+                        android:layout_marginStart="4dp"
+                        android:text="@string/btn_protocol_csv"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_primary"
+                        app:backgroundTint="@color/bg_card"
+                        app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+
+                </GridLayout>
+
+                <!-- EXPORT ALL (ZIP) Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnExportAllZip"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/btn_export_all"
+                    android:textColor="@color/bg_primary"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/accent_cyan"
+                    app:icon="@drawable/ic_download"
+                    app:iconTint="@color/bg_primary" />
+
+                <!-- Configure Webhook Stream Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSheetWebhookConfig"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="📡 Setup Free Webhook Stream"
+                    android:textColor="@color/text_primary"
                     app:backgroundTint="@color/bg_secondary"
+                    app:strokeColor="@color/accent_cyan"
+                    app:strokeWidth="1dp" />
+
+                <!-- Check Updates Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSheetCheckUpdate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="🔄 Check for App Updates"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/bg_card"
                     app:strokeColor="@color/bg_card_border"
                     app:strokeWidth="1dp" />
 
+                <!-- Clear Database Button -->
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSheetProvablyFair"
-                    android:layout_width="0dp"
+                    android:id="@+id/btnClearData"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="6dp"
-                    android:text="🔐 SHA-512 Verifier"
-                    android:textSize="11sp"
-                    android:textColor="@color/accent_purple"
-                    app:backgroundTint="@color/bg_secondary"
-                    app:strokeColor="@color/bg_card_border"
+                    android:text="@string/btn_clear_data"
+                    android:textColor="@color/accent_rose"
+                    app:backgroundTint="@color/bg_card"
+                    app:strokeColor="@color/accent_rose"
                     app:strokeWidth="1dp" />
+
             </LinearLayout>
-
-            <!-- WinGo / BigSmall Radar Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSheetWingoRadar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp"
-                android:text="🎯 WinGo / Big-Small Trend Radar"
-                android:textSize="12sp"
-                android:textColor="@color/accent_emerald"
-                app:backgroundTint="@color/bg_secondary"
-                app:strokeColor="@color/accent_emerald"
-                app:strokeWidth="1dp" />
-
-            <!-- Quick Controls (Open, Reload, Pause/Resume) -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="10dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSheetReload"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
-                    android:text="@string/btn_reload"
-                    android:textColor="@color/text_primary"
-                    app:backgroundTint="@color/bg_secondary"
-                    app:strokeColor="@color/bg_card_border"
-                    app:strokeWidth="1dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSheetPauseResume"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="6dp"
-                    android:text="@string/btn_pause"
-                    android:textColor="@color/text_primary"
-                    app:backgroundTint="@color/bg_secondary"
-                    app:strokeColor="@color/bg_card_border"
-                    app:strokeWidth="1dp" />
-            </LinearLayout>
-
-            <!-- Export Buttons Grid -->
-            <GridLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:columnCount="2"
-                android:rowCount="2"
-                android:layout_marginBottom="10dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnExportRoundsCsv"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_columnWeight="1"
-                    android:layout_marginEnd="4dp"
-                    android:layout_marginBottom="6dp"
-                    android:text="@string/btn_rounds_csv"
-                    android:textSize="11sp"
-                    android:textColor="@color/text_primary"
-                    app:backgroundTint="@color/bg_card"
-                    app:strokeColor="@color/bg_card_border"
-                    app:strokeWidth="1dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnExportEventsCsv"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_columnWeight="1"
-                    android:layout_marginStart="4dp"
-                    android:layout_marginBottom="6dp"
-                    android:text="@string/btn_events_csv"
-                    android:textSize="11sp"
-                    android:textColor="@color/text_primary"
-                    app:backgroundTint="@color/bg_card"
-                    app:strokeColor="@color/bg_card_border"
-                    app:strokeWidth="1dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnExportFeaturesCsv"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_columnWeight="1"
-                    android:layout_marginEnd="4dp"
-                    android:text="@string/btn_features_csv"
-                    android:textSize="11sp"
-                    android:textColor="@color/text_primary"
-                    app:backgroundTint="@color/bg_card"
-                    app:strokeColor="@color/bg_card_border"
-                    app:strokeWidth="1dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnExportProtocolCsv"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_columnWeight="1"
-                    android:layout_marginStart="4dp"
-                    android:text="@string/btn_protocol_csv"
-                    android:textSize="11sp"
-                    android:textColor="@color/text_primary"
-                    app:backgroundTint="@color/bg_card"
-                    app:strokeColor="@color/bg_card_border"
-                    app:strokeWidth="1dp" />
-
-            </GridLayout>
-
-            <!-- EXPORT ALL (ZIP) Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnExportAllZip"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="@string/btn_export_all"
-                android:textColor="@color/bg_primary"
-                android:textStyle="bold"
-                app:backgroundTint="@color/accent_cyan"
-                app:icon="@drawable/ic_download"
-                app:iconTint="@color/bg_primary" />
-
-            <!-- Configure Webhook Stream Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSheetWebhookConfig"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="📡 Setup Free Webhook Stream"
-                android:textColor="@color/text_primary"
-                app:backgroundTint="@color/bg_secondary"
-                app:strokeColor="@color/accent_cyan"
-                app:strokeWidth="1dp" />
-
-            <!-- Check Updates Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSheetCheckUpdate"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="🔄 Check for App Updates"
-                android:textColor="@color/text_primary"
-                app:backgroundTint="@color/bg_card"
-                app:strokeColor="@color/bg_card_border"
-                app:strokeWidth="1dp" />
-
-            <!-- Clear Database Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnClearData"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/btn_clear_data"
-                android:textColor="@color/accent_rose"
-                app:backgroundTint="@color/bg_card"
-                app:strokeColor="@color/accent_rose"
-                app:strokeWidth="1dp" />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

@@ -91,4 +91,33 @@ class WingoProtocolEngineTest {
         val transitions = WingoTrendAnalyzer.calculateTransitions(mockResults)
         assertTrue(transitions.afterBigNextBigPct > 0.0)
     }
+
+    @Test
+    fun testMultiRoomSeparationAndPeriodIdentification() {
+        val engine = WingoProtocolEngine()
+
+        assertEquals(WingoProtocolEngine.WingoRoom.WINGO_30S, WingoProtocolEngine.WingoRoom.fromPeriodId("20260929100052317"))
+        assertEquals(WingoProtocolEngine.WingoRoom.WINGO_1M, WingoProtocolEngine.WingoRoom.fromPeriodId("20260929100011158"))
+        assertEquals(WingoProtocolEngine.WingoRoom.WINGO_3M, WingoProtocolEngine.WingoRoom.fromPeriodId("20260929100020386"))
+        assertEquals(WingoProtocolEngine.WingoRoom.WINGO_5M, WingoProtocolEngine.WingoRoom.fromPeriodId("20260929100030231"))
+
+        // Process 30s payload
+        val payload30s = """{"data":{"list":[{"issueNumber":"20260929100052317","number":"8","color":"red","premium":"8","sum":0}]}}"""
+        engine.processPayload("FETCH", "https://draw.ar-lottery06.com/WinGo/WinGo_30S/GetHistoryIssuePage.json", payload30s)
+
+        // Process 1M payload
+        val payload1m = """{"data":{"list":[{"issueNumber":"20260929100011158","number":"3","color":"green","premium":"3","sum":0}]}}"""
+        engine.processPayload("FETCH", "https://draw.ar-lottery06.com/WinGo/WinGo_1M/GetHistoryIssuePage.json", payload1m)
+
+        val history30s = engine.getRecentResults(WingoProtocolEngine.WingoRoom.WINGO_30S)
+        val history1m = engine.getRecentResults(WingoProtocolEngine.WingoRoom.WINGO_1M)
+
+        assertEquals(1, history30s.size)
+        assertEquals(8, history30s[0].number)
+        assertEquals("BIG", history30s[0].size)
+
+        assertEquals(1, history1m.size)
+        assertEquals(3, history1m[0].number)
+        assertEquals("SMALL", history1m[0].size)
+    }
 }

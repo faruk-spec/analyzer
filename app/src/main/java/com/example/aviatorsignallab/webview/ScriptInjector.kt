@@ -288,7 +288,11 @@ object ScriptInjector {
                                     if (lower.indexOf('multiplier') !== -1 || lower.indexOf('crash') !== -1 || lower.indexOf('round') !== -1 || 
                                         lower.indexOf('wingo') !== -1 || lower.indexOf('lottery') !== -1 || lower.indexOf('issue') !== -1 ||
                                         (url && (url.toLowerCase().indexOf('aviator') !== -1 || url.toLowerCase().indexOf('wingo') !== -1 || url.toLowerCase().indexOf('lottery') !== -1))) {
-                                        safeDispatch("FETCH", "INCOMING", bodyText, bodyText.length);
+                                        safeDispatch("FETCH", "INCOMING", JSON.stringify({
+                                            __url: url,
+                                            __body: bodyText,
+                                            data: (function(){ try { return JSON.parse(bodyText); } catch(e){ return bodyText; } })()
+                                        }), bodyText.length);
                                     }
                                 }
                             }).catch(function(){});
@@ -333,7 +337,11 @@ object ScriptInjector {
                                     if (lower.indexOf('multiplier') !== -1 || lower.indexOf('crash') !== -1 || lower.indexOf('round') !== -1 || 
                                         lower.indexOf('wingo') !== -1 || lower.indexOf('lottery') !== -1 || lower.indexOf('issue') !== -1 ||
                                         (self.__xhrUrl && (self.__xhrUrl.toLowerCase().indexOf('aviator') !== -1 || self.__xhrUrl.toLowerCase().indexOf('wingo') !== -1 || self.__xhrUrl.toLowerCase().indexOf('lottery') !== -1))) {
-                                        safeDispatch("XHR", "INCOMING", text, text.length);
+                                        safeDispatch("XHR", "INCOMING", JSON.stringify({
+                                            __url: self.__xhrUrl,
+                                            __body: text,
+                                            data: (function(){ try { return JSON.parse(text); } catch(e){ return text; } })()
+                                        }), text.length);
                                     }
                                 }
                             } catch(e) {}
@@ -343,6 +351,75 @@ object ScriptInjector {
                     return origSend.apply(this, arguments);
                 };
             }
+
+            // 6. Real-time WinGo Live State Extractor (DOM & Screen Sync)
+            try {
+                var lastPeriod = "";
+                var lastTime = "";
+                var lastRoom = "";
+
+                function checkWingoDom() {
+                    try {
+                        var text = document.body ? document.body.innerText : "";
+                        if (!text || (text.indexOf("WinGo") === -1 && text.indexOf("wingo") === -1)) return;
+
+                        // 1. Detect active room tab (30sec, 1 Min, 3 Min, 5 Min)
+                        var activeRoom = "WinGo_30S";
+                        var tabs = document.querySelectorAll('.van-tab--active, .active, [class*="active"], [class*="select"]');
+                        for (var t = 0; t < tabs.length; t++) {
+                            var tabText = (tabs[t].innerText || "").toLowerCase();
+                            if (tabText.indexOf("30s") !== -1 || tabText.indexOf("30sec") !== -1) { activeRoom = "WinGo_30S"; break; }
+                            if (tabText.indexOf("3") !== -1 && tabText.indexOf("min") !== -1) { activeRoom = "WinGo_3M"; break; }
+                            if (tabText.indexOf("5") !== -1 && tabText.indexOf("min") !== -1) { activeRoom = "WinGo_5M"; break; }
+                            if (tabText.indexOf("1") !== -1 && tabText.indexOf("min") !== -1) { activeRoom = "WinGo_1M"; break; }
+                        }
+
+                        // 2. Detect 16-18 digit period ID (e.g. 20260929100052298)
+                        var periodMatch = text.match(/\b(202\d{13,15})\b/);
+                        var currentPeriod = periodMatch ? periodMatch[1] : "";
+
+                        // 3. Detect countdown time (e.g. 00:23 or 02:46 or 0 0 : 2 3)
+                        var timeMatch = text.match(/(\d{1,2})\s*:\s*(\d{2})/);
+                        var remainingSecs = 0;
+                        var timeStr = "";
+                        if (timeMatch) {
+                            var mins = parseInt(timeMatch[1], 10);
+                            var secs = parseInt(timeMatch[2], 10);
+                            remainingSecs = mins * 60 + secs;
+                            timeStr = (mins < 10 ? "0" + mins : "" + mins) + ":" + (secs < 10 ? "0" + secs : "" + secs);
+                        }
+
+                        // 4. Extract recent winning balls near the header ticket
+                        var balls = [];
+                        var ballEls = document.querySelectorAll('[class*="ball"], [class*="num"], [class*="item"]');
+                        for (var b = 0; b < ballEls.length; b++) {
+                            var bText = ballEls[b].innerText ? ballEls[b].innerText.trim() : "";
+                            if (/^[0-9]$/.test(bText)) {
+                                balls.push(bText);
+                                if (balls.length >= 5) break;
+                            }
+                        }
+
+                        if (currentPeriod && (currentPeriod !== lastPeriod || timeStr !== lastTime || activeRoom !== lastRoom)) {
+                            lastPeriod = currentPeriod;
+                            lastTime = timeStr;
+                            lastRoom = activeRoom;
+
+                            safeDispatch("WINGO_DOM", "INCOMING", JSON.stringify({
+                                type: "WINGO_DOM_SYNC",
+                                gameType: activeRoom,
+                                periodId: currentPeriod,
+                                timeText: timeStr,
+                                remainingSeconds: remainingSecs,
+                                isLocked: remainingSecs <= 5,
+                                balls: balls
+                            }), 50);
+                        }
+                    } catch(e) {}
+                }
+
+                setInterval(checkWingoDom, 400);
+            } catch(e) {}
 
         })();
     """.trimIndent()

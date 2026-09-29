@@ -23,4 +23,12 @@
     <color name="status_analyzing">#3B82F6</color>
     <color name="status_idle">#64748B</color>
     <color name="status_crash">#EF4444</color>
+
+    <!-- WinGo Specific Game Colors -->
+    <color name="wingo_red">#EF4444</color>
+    <color name="wingo_green">#10B981</color>
+    <color name="wingo_violet">#9333EA</color>
+    <color name="wingo_big">#F59E0B</color>
+    <color name="wingo_small">#3B82F6</color>
+    <color name="wingo_dragon">#F43F5E</color>
 </resources>

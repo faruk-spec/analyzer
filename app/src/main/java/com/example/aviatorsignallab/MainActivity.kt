@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.graphics.Color
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
@@ -22,6 +23,7 @@ import com.example.aviatorsignallab.probability.ProbabilityEngine
 import com.example.aviatorsignallab.ui.DiagnosticsDialog
 import com.example.aviatorsignallab.ui.ResearchViewModel
 import com.example.aviatorsignallab.ui.TrafficInspectorDialog
+import com.example.aviatorsignallab.wingo.WingoProtocolEngine
 import com.example.aviatorsignallab.update.ApkInstaller
 import com.example.aviatorsignallab.update.ReleaseMetadata
 import com.example.aviatorsignallab.update.UpdateCheckResult
@@ -334,6 +336,183 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvBubbleProb.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
             }
         }
+
+        // App Mode Switcher Observer
+        viewModel.appMode.observe(this) { mode ->
+            if (mode == ResearchViewModel.AppMode.WINGO) {
+                binding.btnModeWingo.setBackgroundResource(R.drawable.bg_toggle_selected)
+                binding.btnModeWingo.setTextColor(Color.WHITE)
+                binding.btnModeAviator.setBackgroundResource(0)
+                binding.btnModeAviator.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+
+                binding.wingoTopHudStrip.visibility = View.VISIBLE
+                binding.metricsStrip.visibility = View.GONE
+
+                binding.bottomSheetResearch.btnSheetTabWingo.performClick()
+            } else {
+                binding.btnModeAviator.setBackgroundResource(R.drawable.bg_toggle_selected)
+                binding.btnModeAviator.setTextColor(Color.WHITE)
+                binding.btnModeWingo.setBackgroundResource(0)
+                binding.btnModeWingo.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+
+                binding.metricsStrip.visibility = View.VISIBLE
+                binding.wingoTopHudStrip.visibility = View.GONE
+
+                binding.bottomSheetResearch.btnSheetTabAviator.performClick()
+            }
+        }
+
+        // Active WinGo Room Observer
+        viewModel.activeWingoRoom.observe(this) { activeRoom ->
+            fun updateChip(chip: TextView, room: WingoProtocolEngine.WingoRoom) {
+                if (room == activeRoom) {
+                    chip.setBackgroundResource(R.drawable.bg_toggle_selected)
+                    chip.setTextColor(Color.WHITE)
+                } else {
+                    chip.setBackgroundResource(R.drawable.bg_toggle_unselected)
+                    chip.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+                }
+            }
+            updateChip(binding.chipWingo30s, WingoProtocolEngine.WingoRoom.WINGO_30S)
+            updateChip(binding.chipWingo1m, WingoProtocolEngine.WingoRoom.WINGO_1M)
+            updateChip(binding.chipWingo3m, WingoProtocolEngine.WingoRoom.WINGO_3M)
+            updateChip(binding.chipWingo5m, WingoProtocolEngine.WingoRoom.WINGO_5M)
+
+            updateChip(binding.bottomSheetResearch.sheetChipWingo30s, WingoProtocolEngine.WingoRoom.WINGO_30S)
+            updateChip(binding.bottomSheetResearch.sheetChipWingo1m, WingoProtocolEngine.WingoRoom.WINGO_1M)
+            updateChip(binding.bottomSheetResearch.sheetChipWingo3m, WingoProtocolEngine.WingoRoom.WINGO_3M)
+            updateChip(binding.bottomSheetResearch.sheetChipWingo5m, WingoProtocolEngine.WingoRoom.WINGO_5M)
+
+            binding.bottomSheetResearch.tvSheetWingoRoomName.text = "WinGo ${activeRoom.displayName}"
+        }
+
+        // WinGo Period & Live Countdown Observer
+        viewModel.wingoIssue.observe(this) { issue ->
+            binding.tvWingoPeriod.text = issue.currentPeriod
+            binding.bottomSheetResearch.tvSheetWingoPeriod.text = "Period: ${issue.currentPeriod}"
+
+            val mins = issue.remainingSeconds / 60
+            val secs = issue.remainingSeconds % 60
+            val timeFormatted = String.format(java.util.Locale.US, "%02d:%02d", mins, secs)
+
+            binding.tvWingoCountdown.text = timeFormatted
+            binding.bottomSheetResearch.tvSheetWingoCountdown.text = timeFormatted
+
+            if (issue.isLocked) {
+                binding.tvWingoLockBadge.text = "LOCKED"
+                binding.tvWingoLockBadge.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                binding.tvWingoCountdown.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+
+                binding.bottomSheetResearch.tvSheetWingoLock.text = "LOCKED"
+                binding.bottomSheetResearch.tvSheetWingoLock.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                binding.bottomSheetResearch.tvSheetWingoCountdown.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+            } else {
+                binding.tvWingoLockBadge.text = "OPEN"
+                binding.tvWingoLockBadge.setTextColor(ContextCompat.getColor(this, R.color.wingo_green))
+                binding.tvWingoCountdown.setTextColor(Color.WHITE)
+
+                binding.bottomSheetResearch.tvSheetWingoLock.text = "OPEN"
+                binding.bottomSheetResearch.tvSheetWingoLock.setTextColor(ContextCompat.getColor(this, R.color.wingo_green))
+                binding.bottomSheetResearch.tvSheetWingoCountdown.setTextColor(Color.WHITE)
+            }
+        }
+
+        // Latest WinGo Drawn Ball & Size Observer
+        viewModel.latestWingoDraw.observe(this) { draw ->
+            if (draw != null) {
+                binding.tvWingoLastBall.text = draw.number.toString()
+                binding.tvWingoLastSize.text = draw.size
+
+                val ballColor = when (draw.color.uppercase()) {
+                    "RED", "RED_VIOLET" -> ContextCompat.getColor(this, R.color.wingo_red)
+                    "GREEN", "GREEN_VIOLET" -> ContextCompat.getColor(this, R.color.wingo_green)
+                    else -> ContextCompat.getColor(this, R.color.wingo_violet)
+                }
+                val ballDrawable = ContextCompat.getDrawable(this, R.drawable.bg_wingo_ball)?.mutate()
+                ballDrawable?.setTint(ballColor)
+                binding.tvWingoLastBall.background = ballDrawable
+
+                val sizeColor = if (draw.size == "BIG") {
+                    ContextCompat.getColor(this, R.color.wingo_big)
+                } else {
+                    ContextCompat.getColor(this, R.color.wingo_small)
+                }
+                binding.tvWingoLastSize.setTextColor(sizeColor)
+
+                // Bottom sheet
+                binding.bottomSheetResearch.tvSheetWingoBall.text = draw.number.toString()
+                val sheetBallDrawable = ContextCompat.getDrawable(this, R.drawable.bg_wingo_ball)?.mutate()
+                sheetBallDrawable?.setTint(ballColor)
+                binding.bottomSheetResearch.tvSheetWingoBall.background = sheetBallDrawable
+
+                binding.bottomSheetResearch.tvSheetWingoSize.text = draw.size
+                binding.bottomSheetResearch.tvSheetWingoSize.setTextColor(sizeColor)
+                binding.bottomSheetResearch.tvSheetWingoColor.text = draw.color.replace("_", "/")
+                binding.bottomSheetResearch.tvSheetWingoColor.setTextColor(ballColor)
+            }
+        }
+
+        // WinGo Trend & Dragon Streak Observer
+        viewModel.wingoTrendSummary.observe(this) { trend ->
+            val sheet = binding.bottomSheetResearch
+            if (trend.currentStreakLength >= 3) {
+                binding.tvWingoStreakBadge.visibility = View.VISIBLE
+                binding.tvWingoStreakBadge.text = "🐉 ${trend.currentStreakLength}x ${trend.currentStreakType}"
+
+                if (trend.isDragonActive) {
+                    binding.bannerWingoAlert.visibility = View.VISIBLE
+                    binding.tvWingoAlertTitle.text = "🐉 DRAGON DETECTED: ${trend.currentStreakLength}x ${trend.currentStreakType}"
+                    binding.tvWingoAlertSubtitle.text = "Extreme parity run on ${viewModel.activeWingoRoom.value?.displayName ?: "WinGo"} • Reversal Expected"
+                } else {
+                    binding.bannerWingoAlert.visibility = View.GONE
+                }
+            } else {
+                binding.tvWingoStreakBadge.visibility = View.GONE
+                binding.bannerWingoAlert.visibility = View.GONE
+            }
+
+            val bigPct = kotlin.math.round(trend.bigRatioPct).toInt()
+            val smallPct = kotlin.math.round(trend.smallRatioPct).toInt()
+            sheet.tvSheetBigPercent.text = "BIG $bigPct%"
+            sheet.tvSheetSmallPercent.text = "SMALL $smallPct%"
+            sheet.progressSheetBigSmall.progress = bigPct
+
+            val greenCount = trend.colorCounts["GREEN"] ?: trend.colorCounts["green"] ?: 0
+            val redCount = trend.colorCounts["RED"] ?: trend.colorCounts["red"] ?: 0
+            val violetCount = (trend.colorCounts["VIOLET"] ?: trend.colorCounts["violet"] ?: 0) +
+                (trend.colorCounts["RED_VIOLET"] ?: 0) + (trend.colorCounts["GREEN_VIOLET"] ?: 0)
+
+            sheet.tvSheetStatCounts.text = "Big: ${trend.bigCount} | Small: ${trend.smallCount} | Green: $greenCount | Red: $redCount | Violet: $violetCount"
+
+            if (trend.isDragonActive) {
+                sheet.tvSheetDragonTitle.text = "🐉 ACTIVE DRAGON: ${trend.currentStreakLength}x ${trend.currentStreakType}"
+                sheet.tvSheetDragonDetails.text = "Statistically extreme streak (${trend.currentStreakLength} consecutive rounds). Historical reversion probability is high."
+            } else {
+                sheet.tvSheetDragonTitle.text = "🐉 DRAGON STREAK RADAR"
+                sheet.tvSheetDragonDetails.text = "Current: ${trend.currentStreakLength}x ${trend.currentStreakType}. Threshold for dragon alert is 5 consecutive rounds."
+            }
+        }
+
+        // WinGo Markov Parity Transition Matrix Observer
+        viewModel.wingoTransitions.observe(this) { trans ->
+            val sheet = binding.bottomSheetResearch
+            sheet.tvSheetTransBB.text = "%.1f%%".format(trans.afterBigNextBigPct)
+            sheet.tvSheetTransBS.text = "%.1f%%".format(trans.afterBigNextSmallPct)
+            sheet.tvSheetTransSS.text = "%.1f%%".format(trans.afterSmallNextSmallPct)
+            sheet.tvSheetTransSB.text = "%.1f%%".format(trans.afterSmallNextBigPct)
+
+            val prediction = when {
+                trans.afterBigNextSmallPct > 55.0 -> "Trend: Alternating Small Expected (P: ${trans.afterBigNextSmallPct}%)"
+                trans.afterSmallNextBigPct > 55.0 -> "Trend: Alternating Big Expected (P: ${trans.afterSmallNextBigPct}%)"
+                else -> "Parity Transition: Balanced Distribution"
+            }
+            sheet.tvSheetWingoPrediction.text = prediction
+        }
+
+        // WinGo History Draws Table Observer
+        viewModel.wingoHistory.observe(this) { history ->
+            renderWingoHistoryTable(history)
+        }
     }
 
     private fun triggerPrepareVibration() {
@@ -379,6 +558,54 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
     private fun setupListeners() {
         val sheet = binding.bottomSheetResearch
 
+        binding.btnModeAviator.setOnClickListener {
+            viewModel.setAppMode(ResearchViewModel.AppMode.AVIATOR)
+        }
+
+        binding.btnModeWingo.setOnClickListener {
+            viewModel.setAppMode(ResearchViewModel.AppMode.WINGO)
+        }
+
+        sheet.btnSheetTabWingo.setOnClickListener {
+            sheet.layoutSheetWingo.visibility = View.VISIBLE
+            sheet.layoutSheetAviator.visibility = View.GONE
+            sheet.btnSheetTabWingo.setBackgroundResource(R.drawable.bg_toggle_selected)
+            sheet.btnSheetTabWingo.setTextColor(Color.WHITE)
+            sheet.btnSheetTabAviator.setBackgroundResource(0)
+            sheet.btnSheetTabAviator.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        }
+
+        sheet.btnSheetTabAviator.setOnClickListener {
+            sheet.layoutSheetAviator.visibility = View.VISIBLE
+            sheet.layoutSheetWingo.visibility = View.GONE
+            sheet.btnSheetTabAviator.setBackgroundResource(R.drawable.bg_toggle_selected)
+            sheet.btnSheetTabAviator.setTextColor(Color.WHITE)
+            sheet.btnSheetTabWingo.setBackgroundResource(0)
+            sheet.btnSheetTabWingo.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        }
+
+        // WinGo Room Selection Chips (Top HUD & Bottom Sheet)
+        val roomChips = listOf(
+            Pair(binding.chipWingo30s, WingoProtocolEngine.WingoRoom.WINGO_30S),
+            Pair(binding.chipWingo1m, WingoProtocolEngine.WingoRoom.WINGO_1M),
+            Pair(binding.chipWingo3m, WingoProtocolEngine.WingoRoom.WINGO_3M),
+            Pair(binding.chipWingo5m, WingoProtocolEngine.WingoRoom.WINGO_5M),
+            Pair(sheet.sheetChipWingo30s, WingoProtocolEngine.WingoRoom.WINGO_30S),
+            Pair(sheet.sheetChipWingo1m, WingoProtocolEngine.WingoRoom.WINGO_1M),
+            Pair(sheet.sheetChipWingo3m, WingoProtocolEngine.WingoRoom.WINGO_3M),
+            Pair(sheet.sheetChipWingo5m, WingoProtocolEngine.WingoRoom.WINGO_5M)
+        )
+        for ((chip, room) in roomChips) {
+            chip.setOnClickListener {
+                viewModel.setWingoRoom(room)
+            }
+        }
+
+        binding.bannerWingoAlert.setOnClickListener {
+            bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+            sheet.btnSheetTabWingo.performClick()
+        }
+
         binding.bannerPreCrashAlert.setOnClickListener {
             binding.bannerPreCrashAlert.visibility = View.GONE
         }
@@ -422,10 +649,6 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         sheet.btnSheetProvablyFair.setOnClickListener {
             showProvablyFairDialog()
-        }
-
-        sheet.btnSheetWingoRadar.setOnClickListener {
-            showWingoRadarDialog()
         }
 
         sheet.btnSheetReload.setOnClickListener {
@@ -917,7 +1140,7 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
         sb.append("🎯 WINGO / BIG-SMALL PROTOCOL TELEMETRY\n")
         if (issue != null) {
             val lockStatus = if (issue.isLocked) "🔒 LOCKED (T-5s)" else "🟢 BETTING OPEN"
-            sb.append("Current Period: ${issue.currentPeriod} (${issue.gameType})\n")
+            sb.append("Current Period: ${issue.currentPeriod} (${issue.room.displayName})\n")
             sb.append("Server Countdown: ${issue.remainingSeconds}s ($lockStatus)\n\n")
         } else {
             sb.append("Current Period: Waiting for WinGo traffic...\n\n")
@@ -959,5 +1182,74 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
             .setMessage(sb.toString())
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun renderWingoHistoryTable(history: List<WingoProtocolEngine.WingoDrawResult>) {
+        val container = binding.bottomSheetResearch.llSheetWingoHistoryTable
+        container.removeAllViews()
+
+        val topItems = history.take(12)
+        if (topItems.isEmpty()) {
+            val tv = TextView(this).apply {
+                text = "Connecting to room draw results..."
+                setTextColor(ContextCompat.getColor(context, R.color.text_muted))
+                textSize = 12f
+                setPadding(0, 16, 0, 16)
+            }
+            container.addView(tv)
+            return
+        }
+
+        for (item in topItems) {
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setPadding(0, 8, 0, 8)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+
+            val shortPeriod = if (item.periodId.length > 5) item.periodId.takeLast(5) else item.periodId
+            val tvPeriod = TextView(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f)
+                text = shortPeriod
+                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                textSize = 11f
+                typeface = android.graphics.Typeface.MONOSPACE
+            }
+
+            val ballColor = when (item.color.uppercase()) {
+                "RED", "RED_VIOLET" -> ContextCompat.getColor(context, R.color.wingo_red)
+                "GREEN", "GREEN_VIOLET" -> ContextCompat.getColor(context, R.color.wingo_green)
+                else -> ContextCompat.getColor(context, R.color.wingo_violet)
+            }
+
+            val tvBall = TextView(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 0.8f)
+                text = "  ${item.number}"
+                setTextColor(ballColor)
+                textSize = 12f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+
+            val tvSize = TextView(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 0.8f)
+                text = item.size
+                setTextColor(if (item.size == "BIG") ContextCompat.getColor(context, R.color.wingo_big) else ContextCompat.getColor(context, R.color.wingo_small))
+                textSize = 11f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+
+            val tvColor = TextView(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 0.8f)
+                text = item.color.replace("_", "/")
+                setTextColor(ballColor)
+                textSize = 10f
+            }
+
+            row.addView(tvPeriod)
+            row.addView(tvBall)
+            row.addView(tvSize)
+            row.addView(tvColor)
+            container.addView(row)
+        }
     }
 }

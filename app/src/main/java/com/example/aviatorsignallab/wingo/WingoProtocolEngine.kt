@@ -6,14 +6,51 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 
 /**
- * Protocol engine for WinGo / BigSmall lottery games on casino platforms.
- * Intercepts HTTP/Fetch/XHR responses and WebSocket frames containing
- * issue IDs, countdown timers, winning numbers, colors, and Big/Small classifications.
+ * Protocol and state engine for WinGo / BigSmall lottery rooms on casino platforms.
+ * Supports distinct state tracking across all 4 rooms:
+ * - WinGo 30s (Room code 10005, cycle: 30s)
+ * - WinGo 1Min (Room code 10001, cycle: 60s)
+ * - WinGo 3Min (Room code 10002, cycle: 180s)
+ * - WinGo 5Min (Room code 10003, cycle: 300s)
  */
 class WingoProtocolEngine(
     private val listener: WingoListener? = null
 ) {
     private val gson = Gson()
+
+    enum class WingoRoom(val roomCode: String, val displayName: String, val cycleSeconds: Int, val idPattern: String) {
+        WINGO_30S("WinGo_30S", "30sec", 30, "10005"),
+        WINGO_1M("WinGo_1M", "1 Min", 60, "10001"),
+        WINGO_3M("WinGo_3M", "3 Min", 180, "10002"),
+        WINGO_5M("WinGo_5M", "5 Min", 300, "10003");
+
+        companion object {
+            fun fromString(str: String): WingoRoom {
+                val lower = str.lowercase()
+                return when {
+                    lower.contains("30s") || lower.contains("30sec") || lower.contains("10005") -> WINGO_30S
+                    lower.contains("3m") || lower.contains("3min") || lower.contains("10002") -> WINGO_3M
+                    lower.contains("5m") || lower.contains("5min") || lower.contains("10003") -> WINGO_5M
+                    lower.contains("1m") || lower.contains("1min") || lower.contains("10001") -> WINGO_1M
+                    else -> WINGO_30S
+                }
+            }
+
+            fun fromPeriodId(periodId: String): WingoRoom? {
+                if (periodId.length >= 13) {
+                    val code = periodId.substring(8, 13)
+                    return when (code) {
+                        "10005" -> WINGO_30S
+                        "10001" -> WINGO_1M
+                        "10002" -> WINGO_3M
+                        "10003" -> WINGO_5M
+                        else -> null
+                    }
+                }
+                return null
+            }
+        }
+    }
 
     data class WingoDrawResult(
         val periodId: String,
@@ -27,26 +64,48 @@ class WingoProtocolEngine(
         val currentPeriod: String,
         val remainingSeconds: Int,
         val isLocked: Boolean,
-        val gameType: String    // "30s", "1m", "3m", "5m"
+        val room: WingoRoom
+    )
+
+    data class RoomState(
+        val room: WingoRoom,
+        var currentPeriod: String = "--",
+        var remainingSeconds: Int = 0,
+        var isLocked: Boolean = false,
+        val history: MutableList<WingoDrawResult> = mutableListOf(),
+        var trendSummary: WingoTrendAnalyzer.TrendSummary = WingoTrendAnalyzer.analyzeTrends(emptyList()),
+        var transitions: WingoTrendAnalyzer.TransitionProbabilities = WingoTrendAnalyzer.calculateTransitions(emptyList())
     )
 
     interface WingoListener {
-        fun onNewDrawResult(result: WingoDrawResult, history: List<WingoDrawResult>)
-        fun onIssueUpdated(issue: WingoIssueInfo)
-        fun onHistoryLoaded(results: List<WingoDrawResult>)
+        fun onNewDrawResult(result: WingoDrawResult, history: List<WingoDrawResult>) {}
+        fun onIssueUpdated(issue: WingoIssueInfo) {}
+        fun onHistoryLoaded(results: List<WingoDrawResult>) {}
+        fun onRoomUpdated(
+            room: WingoRoom,
+            issue: WingoIssueInfo,
+            history: List<WingoDrawResult>,
+            trend: WingoTrendAnalyzer.TrendSummary,
+            trans: WingoTrendAnalyzer.TransitionProbabilities
+        ) {}
     }
 
-    var currentIssue: WingoIssueInfo = WingoIssueInfo("--", 0, false, "1m")
+    val roomStates: Map<WingoRoom, RoomState> = WingoRoom.values().associateWith { RoomState(it) }
+
+    var activeRoom: WingoRoom = WingoRoom.WINGO_30S
         private set
 
-    private val pastResults = mutableListOf<WingoDrawResult>()
+    fun setActiveRoom(room: WingoRoom) {
+        activeRoom = room
+        val state = roomStates[room] ?: return
+        val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
+        listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions)
+    }
+
+    fun getActiveRoomState(): RoomState = roomStates[activeRoom] ?: roomStates.values.first()
 
     /**
      * Determines whether a network packet belongs to WinGo / Lottery game endpoints.
-     * Reverse engineered from damansuperstar1.com bundle:
-     * - GetNoaverageEmerdList, GetGameIssue, GetWinTheLotteryResult, GetLongDragon
-     * - /Lottery/GetHistoryIssuePage, /Lottery/GetGameInfo
-     * - https://draw.ar-lottery06.com/WinGo/.../GetHistoryIssuePage.json
      */
     fun isWingoTraffic(url: String, payload: String?): Boolean {
         val lowerUrl = url.lowercase()
@@ -59,11 +118,13 @@ class WingoProtocolEngine(
                 lowerUrl.contains("getlongdragon") ||
                 lowerUrl.contains("getgameissue") ||
                 lowerUrl.contains("getwinthelotteryresult") ||
-                lowerUrl.contains("win_history")
+                lowerUrl.contains("wingo_dom")
 
         val hasWingoFields = lowerPayload.contains("issuenumber") ||
                 lowerPayload.contains("periodid") ||
                 (lowerPayload.contains("\"number\":") && lowerPayload.contains("\"color\"")) ||
+                lowerPayload.contains("wingo_dom_sync") ||
+                lowerPayload.contains("wingo_live_state") ||
                 lowerPayload.contains("gethistoryissuepage") ||
                 lowerPayload.contains("premium")
 
@@ -71,7 +132,7 @@ class WingoProtocolEngine(
     }
 
     /**
-     * Processes intercepted network payload (XHR, Fetch, or WebSocket) to discover WinGo events.
+     * Ingests network payloads (XHR, Fetch, WebSocket, or DOM Sync).
      */
     @Synchronized
     fun processPayload(transport: String, url: String, payload: String?) {
@@ -89,20 +150,67 @@ class WingoProtocolEngine(
             val element = JsonParser.parseString(cleanJson)
 
             if (element.isJsonObject) {
-                parseJsonObject(element.asJsonObject)
+                parseJsonObject(element.asJsonObject, url)
             } else if (element.isJsonArray) {
-                parseResultsArray(element.asJsonArray)
+                parseResultsArray(element.asJsonArray, WingoRoom.fromString(url))
             }
         } catch (e: Exception) {
-            // Non-JSON or irregular frame - ignored
+            // Irregular format ignored
         }
     }
 
-    private fun parseJsonObject(obj: JsonObject) {
-        // Check for Issue Info / Timer
+    private fun parseJsonObject(obj: JsonObject, url: String) {
+        // Handle DOM Live State directly from injected MutationObserver
+        if (obj.has("type") && (obj.get("type").asString == "WINGO_DOM_SYNC" || obj.get("type").asString == "WINGO_LIVE_STATE")) {
+            val roomStr = obj.get("gameType")?.asString ?: "30sec"
+            val room = WingoRoom.fromString(roomStr)
+            val period = obj.get("periodId")?.asString ?: "--"
+            val seconds = obj.get("remainingSeconds")?.asInt ?: 0
+            val isLocked = obj.get("isLocked")?.asBoolean ?: (seconds <= 5)
+
+            updateRoomIssue(room, period, seconds, isLocked)
+
+            // Extract balls if present
+            if (obj.has("balls") && obj.get("balls").isJsonArray) {
+                val balls = obj.getAsJsonArray("balls")
+                val results = mutableListOf<WingoDrawResult>()
+                for (b in balls) {
+                    val num = b.asString.toIntOrNull() ?: continue
+                    results.add(WingoDrawResult(
+                        periodId = "--",
+                        number = num,
+                        size = if (num >= 5) "BIG" else "SMALL",
+                        color = when {
+                            num == 0 -> "RED_VIOLET"
+                            num == 5 -> "GREEN_VIOLET"
+                            num in listOf(1, 3, 7, 9) -> "GREEN"
+                            else -> "RED"
+                        }
+                    ))
+                }
+                if (results.isNotEmpty()) {
+                    updateRoomHistory(room, results)
+                }
+            }
+            return
+        }
+
+        // Detect target room from URL, gameCode, or period ID
+        var detectedRoom = WingoRoom.fromString(url)
+        if (obj.has("gameCode")) {
+            detectedRoom = WingoRoom.fromString(obj.get("gameCode").asString)
+        }
+
         val periodCandidate = obj.get("issueNumber")?.asString
             ?: obj.get("periodId")?.asString
             ?: obj.get("issue")?.asString
+
+        if (periodCandidate != null) {
+            val roomFromPeriod = WingoRoom.fromPeriodId(periodCandidate)
+            if (roomFromPeriod != null) {
+                detectedRoom = roomFromPeriod
+            }
+        }
 
         val timeRemaining = obj.get("countdown")?.asInt
             ?: obj.get("remainingTime")?.asInt
@@ -110,50 +218,44 @@ class WingoProtocolEngine(
 
         if (periodCandidate != null && timeRemaining != null) {
             val isLocked = timeRemaining <= 5
-            val gameType = obj.get("gameType")?.asString ?: obj.get("type")?.asString ?: "1m"
-            currentIssue = WingoIssueInfo(periodCandidate, timeRemaining, isLocked, gameType)
-            listener?.onIssueUpdated(currentIssue)
+            updateRoomIssue(detectedRoom, periodCandidate, timeRemaining, isLocked)
         }
 
-        // Check for nested arrays (e.g. data: [ ... ])
+        // Check for nested arrays (e.g. data: { list: [ ... ] })
         for (key in listOf("data", "list", "history", "rows")) {
             if (obj.has(key) && obj.get(key).isJsonArray) {
-                parseResultsArray(obj.getAsJsonArray(key))
+                parseResultsArray(obj.getAsJsonArray(key), detectedRoom)
             } else if (obj.has(key) && obj.get(key).isJsonObject) {
-                parseJsonObject(obj.getAsJsonObject(key))
+                parseJsonObject(obj.getAsJsonObject(key), url)
             }
         }
 
-        // Check if current object represents a single draw result
-        if (obj.has("number") || obj.has("openNumber") || obj.has("winNumber")) {
+        // Check if object is single draw result
+        if (obj.has("number") || obj.has("openNumber") || obj.has("winNumber") || obj.has("premium")) {
             val draw = extractSingleDraw(obj)
             if (draw != null) {
-                registerNewDraw(draw)
+                val targetRoom = WingoRoom.fromPeriodId(draw.periodId) ?: detectedRoom
+                registerNewDraw(targetRoom, draw)
             }
         }
     }
 
-    private fun parseResultsArray(arr: JsonArray) {
+    private fun parseResultsArray(arr: JsonArray, fallbackRoom: WingoRoom) {
         val extracted = mutableListOf<WingoDrawResult>()
+        var targetRoom = fallbackRoom
+
         for (item in arr) {
             if (!item.isJsonObject) continue
             val draw = extractSingleDraw(item.asJsonObject)
             if (draw != null) {
+                val roomFromId = WingoRoom.fromPeriodId(draw.periodId)
+                if (roomFromId != null) targetRoom = roomFromId
                 extracted.add(draw)
             }
         }
 
         if (extracted.isNotEmpty()) {
-            synchronized(pastResults) {
-                for (item in extracted) {
-                    if (pastResults.none { it.periodId == item.periodId }) {
-                        pastResults.add(item)
-                    }
-                }
-                // Sort by period descending
-                pastResults.sortByDescending { it.periodId }
-            }
-            listener?.onHistoryLoaded(pastResults.toList())
+            updateRoomHistory(targetRoom, extracted)
         }
     }
 
@@ -195,18 +297,65 @@ class WingoProtocolEngine(
         )
     }
 
-    private fun registerNewDraw(draw: WingoDrawResult) {
-        val snapshot = synchronized(pastResults) {
-            if (pastResults.none { it.periodId == draw.periodId }) {
-                pastResults.add(0, draw)
-                if (pastResults.size > 200) pastResults.removeAt(pastResults.size - 1)
-            }
-            pastResults.toList()
+    fun updateRoomIssue(room: WingoRoom, period: String, remainingSeconds: Int, isLocked: Boolean) {
+        val state = roomStates[room] ?: return
+        state.currentPeriod = period
+        state.remainingSeconds = remainingSeconds
+        state.isLocked = isLocked
+
+        val issue = WingoIssueInfo(period, remainingSeconds, isLocked, room)
+        if (room == activeRoom) {
+            listener?.onIssueUpdated(issue)
+            listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions)
         }
-        listener?.onNewDrawResult(draw, snapshot)
     }
 
-    fun getRecentResults(): List<WingoDrawResult> {
-        return synchronized(pastResults) { pastResults.toList() }
+    fun updateRoomHistory(room: WingoRoom, draws: List<WingoDrawResult>) {
+        val state = roomStates[room] ?: return
+        synchronized(state.history) {
+            for (item in draws) {
+                if (state.history.none { it.periodId == item.periodId && it.periodId != "--" }) {
+                    state.history.add(item)
+                }
+            }
+            state.history.sortByDescending { it.periodId }
+            while (state.history.size > 200) {
+                state.history.removeAt(state.history.size - 1)
+            }
+        }
+
+        state.trendSummary = WingoTrendAnalyzer.analyzeTrends(state.history)
+        state.transitions = WingoTrendAnalyzer.calculateTransitions(state.history)
+
+        val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
+        if (room == activeRoom) {
+            listener?.onHistoryLoaded(state.history.toList())
+            listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions)
+        }
+    }
+
+    private fun registerNewDraw(room: WingoRoom, draw: WingoDrawResult) {
+        val state = roomStates[room] ?: return
+        val snapshot = synchronized(state.history) {
+            if (state.history.none { it.periodId == draw.periodId && it.periodId != "--" }) {
+                state.history.add(0, draw)
+                if (state.history.size > 200) state.history.removeAt(state.history.size - 1)
+            }
+            state.history.toList()
+        }
+
+        state.trendSummary = WingoTrendAnalyzer.analyzeTrends(snapshot)
+        state.transitions = WingoTrendAnalyzer.calculateTransitions(snapshot)
+
+        val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
+        if (room == activeRoom) {
+            listener?.onNewDrawResult(draw, snapshot)
+            listener?.onRoomUpdated(room, issue, snapshot, state.trendSummary, state.transitions)
+        }
+    }
+
+    fun getRecentResults(room: WingoRoom = activeRoom): List<WingoDrawResult> {
+        val state = roomStates[room] ?: return emptyList()
+        return synchronized(state.history) { state.history.toList() }
     }
 }
