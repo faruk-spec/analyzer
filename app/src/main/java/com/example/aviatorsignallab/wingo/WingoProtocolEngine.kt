@@ -74,7 +74,8 @@ class WingoProtocolEngine(
         var isLocked: Boolean = false,
         val history: MutableList<WingoDrawResult> = mutableListOf(),
         var trendSummary: WingoTrendAnalyzer.TrendSummary = WingoTrendAnalyzer.analyzeTrends(emptyList()),
-        var transitions: WingoTrendAnalyzer.TransitionProbabilities = WingoTrendAnalyzer.calculateTransitions(emptyList())
+        var transitions: WingoTrendAnalyzer.TransitionProbabilities = WingoTrendAnalyzer.calculateTransitions(emptyList()),
+        var prediction: WingoTrendAnalyzer.BetPrediction = WingoTrendAnalyzer.predictNextBet(emptyList())
     )
 
     interface WingoListener {
@@ -86,7 +87,8 @@ class WingoProtocolEngine(
             issue: WingoIssueInfo,
             history: List<WingoDrawResult>,
             trend: WingoTrendAnalyzer.TrendSummary,
-            trans: WingoTrendAnalyzer.TransitionProbabilities
+            trans: WingoTrendAnalyzer.TransitionProbabilities,
+            pred: WingoTrendAnalyzer.BetPrediction
         ) {}
     }
 
@@ -99,7 +101,7 @@ class WingoProtocolEngine(
         activeRoom = room
         val state = roomStates[room] ?: return
         val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
-        listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions)
+        listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions, state.prediction)
     }
 
     fun getActiveRoomState(): RoomState = roomStates[activeRoom] ?: roomStates.values.first()
@@ -306,7 +308,7 @@ class WingoProtocolEngine(
         val issue = WingoIssueInfo(period, remainingSeconds, isLocked, room)
         if (room == activeRoom) {
             listener?.onIssueUpdated(issue)
-            listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions)
+            listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions, state.prediction)
         }
     }
 
@@ -326,11 +328,12 @@ class WingoProtocolEngine(
 
         state.trendSummary = WingoTrendAnalyzer.analyzeTrends(state.history)
         state.transitions = WingoTrendAnalyzer.calculateTransitions(state.history)
+        state.prediction = WingoTrendAnalyzer.predictNextBet(state.history)
 
         val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
         if (room == activeRoom) {
             listener?.onHistoryLoaded(state.history.toList())
-            listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions)
+            listener?.onRoomUpdated(room, issue, state.history.toList(), state.trendSummary, state.transitions, state.prediction)
         }
     }
 
@@ -346,11 +349,12 @@ class WingoProtocolEngine(
 
         state.trendSummary = WingoTrendAnalyzer.analyzeTrends(snapshot)
         state.transitions = WingoTrendAnalyzer.calculateTransitions(snapshot)
+        state.prediction = WingoTrendAnalyzer.predictNextBet(snapshot)
 
         val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
         if (room == activeRoom) {
             listener?.onNewDrawResult(draw, snapshot)
-            listener?.onRoomUpdated(room, issue, snapshot, state.trendSummary, state.transitions)
+            listener?.onRoomUpdated(room, issue, snapshot, state.trendSummary, state.transitions, state.prediction)
         }
     }
 

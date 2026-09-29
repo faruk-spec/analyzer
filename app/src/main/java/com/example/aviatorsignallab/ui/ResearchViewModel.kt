@@ -138,6 +138,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private val _activeWingoRoom = MutableLiveData(WingoProtocolEngine.WingoRoom.WINGO_30S)
     val activeWingoRoom: LiveData<WingoProtocolEngine.WingoRoom> = _activeWingoRoom
 
+    private val _wingoPrediction = MutableLiveData(WingoTrendAnalyzer.predictNextBet(emptyList()))
+    val wingoPrediction: LiveData<WingoTrendAnalyzer.BetPrediction> = _wingoPrediction
+
     fun setWingoRoom(room: WingoProtocolEngine.WingoRoom) {
         _activeWingoRoom.postValue(room)
         wingoEngine.setActiveRoom(room)
@@ -147,6 +150,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _wingoHistory.postValue(state.history.toList())
         _wingoTrendSummary.postValue(state.trendSummary)
         _wingoTransitions.postValue(state.transitions)
+        _wingoPrediction.postValue(state.prediction)
         if (state.history.isNotEmpty()) {
             _latestWingoDraw.postValue(state.history.first())
         }
@@ -175,8 +179,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             if (targetRoom == null || targetRoom == _activeWingoRoom.value) {
                 _latestWingoDraw.postValue(result)
                 _wingoHistory.postValue(history)
-                _wingoTrendSummary.postValue(WingoTrendAnalyzer.analyzeTrends(history))
-                _wingoTransitions.postValue(WingoTrendAnalyzer.calculateTransitions(history))
+                val trend = WingoTrendAnalyzer.analyzeTrends(history)
+                val trans = WingoTrendAnalyzer.calculateTransitions(history)
+                val pred = WingoTrendAnalyzer.predictNextBet(history)
+                _wingoTrendSummary.postValue(trend)
+                _wingoTransitions.postValue(trans)
+                _wingoPrediction.postValue(pred)
             }
         }
 
@@ -188,8 +196,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
         override fun onHistoryLoaded(results: List<WingoProtocolEngine.WingoDrawResult>) {
             _wingoHistory.postValue(results)
-            _wingoTrendSummary.postValue(WingoTrendAnalyzer.analyzeTrends(results))
-            _wingoTransitions.postValue(WingoTrendAnalyzer.calculateTransitions(results))
+            val trend = WingoTrendAnalyzer.analyzeTrends(results)
+            val trans = WingoTrendAnalyzer.calculateTransitions(results)
+            val pred = WingoTrendAnalyzer.predictNextBet(results)
+            _wingoTrendSummary.postValue(trend)
+            _wingoTransitions.postValue(trans)
+            _wingoPrediction.postValue(pred)
             if (results.isNotEmpty()) {
                 _latestWingoDraw.postValue(results.first())
             }
@@ -200,13 +212,15 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             issue: WingoProtocolEngine.WingoIssueInfo,
             history: List<WingoProtocolEngine.WingoDrawResult>,
             trend: WingoTrendAnalyzer.TrendSummary,
-            trans: WingoTrendAnalyzer.TransitionProbabilities
+            trans: WingoTrendAnalyzer.TransitionProbabilities,
+            pred: WingoTrendAnalyzer.BetPrediction
         ) {
             if (room == _activeWingoRoom.value) {
                 _wingoIssue.postValue(issue)
                 _wingoHistory.postValue(history)
                 _wingoTrendSummary.postValue(trend)
                 _wingoTransitions.postValue(trans)
+                _wingoPrediction.postValue(pred)
                 if (history.isNotEmpty()) {
                     _latestWingoDraw.postValue(history.first())
                 }

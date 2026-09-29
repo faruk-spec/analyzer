@@ -57,9 +57,9 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             val statusBarHeight = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
             binding.topAppBar.setPadding(
                 binding.topAppBar.paddingLeft,
-                statusBarHeight + 12,
+                statusBarHeight + 4,
                 binding.topAppBar.paddingRight,
-                binding.topAppBar.paddingBottom
+                4
             )
             insets
         }
@@ -345,6 +345,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.btnModeAviator.setBackgroundResource(0)
                 binding.btnModeAviator.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
 
+                binding.layoutTopPrediction.visibility = View.VISIBLE
                 binding.wingoTopHudStrip.visibility = View.VISIBLE
                 binding.metricsStrip.visibility = View.GONE
 
@@ -355,6 +356,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.btnModeWingo.setBackgroundResource(0)
                 binding.btnModeWingo.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
 
+                binding.layoutTopPrediction.visibility = View.GONE
                 binding.metricsStrip.visibility = View.VISIBLE
                 binding.wingoTopHudStrip.visibility = View.GONE
 
@@ -509,6 +511,41 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             sheet.tvSheetWingoPrediction.text = prediction
         }
 
+        // WinGo AI Next Bet Prediction Observer
+        viewModel.wingoPrediction.observe(this) { pred ->
+            val sizeColor = if (pred.recommendedSize == "BIG") {
+                ContextCompat.getColor(this, R.color.wingo_big)
+            } else {
+                ContextCompat.getColor(this, R.color.wingo_small)
+            }
+
+            // Top HUD Bar Prediction Badge
+            binding.tvWingoTopPrediction.text = "🎯 BET: ${pred.recommendedSize} [${pred.confidencePct}%]"
+            binding.tvWingoTopPrediction.setTextColor(sizeColor)
+
+            // Bottom Sheet AI Prediction Card
+            val sheet = binding.bottomSheetResearch
+            sheet.tvSheetPredSize.text = "🎯 BET: ${pred.recommendedSize}"
+            sheet.tvSheetPredSize.setTextColor(sizeColor)
+
+            val colorRes = if (pred.recommendedColor.contains("GREEN")) R.color.wingo_green else R.color.wingo_red
+            sheet.tvSheetPredColor.text = "COLOR: ${pred.recommendedColor}"
+            sheet.tvSheetPredColor.setTextColor(ContextCompat.getColor(this, colorRes))
+
+            sheet.tvSheetPredConfidence.text = "${pred.confidencePct}%"
+            sheet.progressSheetPredConfidence.progress = pred.confidencePct
+
+            sheet.tvSheetPredSafety.text = pred.safetyTier
+            val safetyColor = when (pred.safetyTier) {
+                "HIGH CONFIDENCE" -> ContextCompat.getColor(this, R.color.accent_emerald)
+                "MODERATE" -> ContextCompat.getColor(this, R.color.accent_cyan)
+                else -> ContextCompat.getColor(this, R.color.text_muted)
+            }
+            sheet.tvSheetPredSafety.setTextColor(safetyColor)
+
+            sheet.tvSheetPredReason.text = pred.reasoning
+        }
+
         // WinGo History Draws Table Observer
         viewModel.wingoHistory.observe(this) { history ->
             renderWingoHistoryTable(history)
@@ -564,6 +601,11 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         binding.btnModeWingo.setOnClickListener {
             viewModel.setAppMode(ResearchViewModel.AppMode.WINGO)
+        }
+
+        binding.layoutTopPrediction.setOnClickListener {
+            bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+            sheet.btnSheetTabWingo.performClick()
         }
 
         sheet.btnSheetTabWingo.setOnClickListener {
