@@ -110,7 +110,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             val (summary, patterns) = analysisEngine.analyzeDataset(rCount, eCount, features)
             _researchSummary.postValue(summary)
             if (patterns.isNotEmpty()) {
-                protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.patternDescriptor })
+                protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.descriptor })
             }
         }
     }
@@ -314,7 +314,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             val (summary, patterns) = analysisEngine.analyzeDataset(totalRCount, totalECount, allFeatures)
             if (patterns.isNotEmpty()) {
                 db.featureDao().insertPatterns(patterns)
-                protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.patternDescriptor })
+                protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.descriptor })
             }
             _researchSummary.postValue(summary)
             _totalRounds.postValue(totalRCount)

@@ -109,7 +109,7 @@ class ProtocolDiscoveryEngine(
             synchronized(rollingEventTypes) {
                 if (rollingEventTypes.size >= 8) rollingEventTypes.removeFirst()
                 rollingEventTypes.addLast(eventType)
-                val seq = rollingEventTypes.takeLast(4).joinToString("->")
+                val seq = rollingEventTypes.toList().takeLast(4).joinToString("->")
                 synchronized(activeValidatedPatterns) {
                     if (activeValidatedPatterns.any { seq.contains(it) || it.contains(seq) }) {
                         isPreCrashAlertFiredForRound = true
