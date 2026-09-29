@@ -76,10 +76,6 @@ android {
         debug {
             isDebuggable = true
             applicationIdSuffix = ""
-            val releaseSigning = signingConfigs.getByName("release")
-            if (releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
-                signingConfig = releaseSigning
-            }
         }
     }
 

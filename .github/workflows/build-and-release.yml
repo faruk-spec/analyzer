@@ -79,14 +79,15 @@ jobs:
 
       - name: Build Debug APK
         run: |
+          set -o pipefail
           ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee build_debug.log || {
-            echo "::error::Gradle assembleDebug failed! Diagnostic output:"
-            grep -E "(e: |error:|FAILURE:|\* What went wrong:)" build_debug.log | head -n 40
+            echo "==== GRADLE ASSEMBLE DEBUG FAILURE LOG ===="
+            tail -n 80 build_debug.log
             exit 1
           }
 
       - name: Upload Build Debug Log
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-debug-log
@@ -100,9 +101,19 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'aviatorlab' }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'aviatorsignallab2026' }}
         run: |
+          set -o pipefail
           ./gradlew :app:assembleRelease --stacktrace 2>&1 | tee build_release.log || {
+            echo "==== GRADLE ASSEMBLE RELEASE FAILURE LOG ===="
+            tail -n 80 build_release.log
             echo "::warning::assembleRelease failed, falling back to debug signed APK"
           }
+
+      - name: Upload Build Release Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-release-log
+          path: build_release.log
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
