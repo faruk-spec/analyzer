@@ -90,6 +90,14 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         webView.addJavascriptInterface(GameProtocolBridge(viewModel), "AndroidBridge")
         webView.webViewClient = InstrumentedWebViewClient(this)
         webView.webChromeClient = InstrumentedWebChromeClient(this)
+
+        if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            androidx.webkit.WebViewCompat.addDocumentStartJavaScript(
+                webView,
+                ScriptInjector.INJECTION_SCRIPT,
+                setOf("*")
+            )
+        }
     }
 
     private fun observeViewModel() {

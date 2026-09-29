@@ -3,8 +3,6 @@ package com.example.aviatorsignallab.protocol
 import com.example.aviatorsignallab.model.GameRound
 import com.example.aviatorsignallab.model.LiveEvent
 import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import java.util.concurrent.atomic.AtomicInteger
 
 class ProtocolDiscoveryEngine(
@@ -34,6 +32,9 @@ class ProtocolDiscoveryEngine(
     private val observedTransports = mutableSetOf<String>()
     private val pendingRoundEvents = mutableListOf<LiveEvent>()
 
+    private val multRegex1 = Regex("""([0-9]{1,4}\.[0-9]{1,2})\s*[xX]""")
+    private val multRegex2 = Regex("""["']?(?:multiplier|coef|coefficient|odds|rate|val|x)["']?\s*[:=]\s*["']?([0-9]{1,4}\.[0-9]{1,2})["']?""", RegexOption.IGNORE_CASE)
+
     @Synchronized
     fun processRawEvent(
         transport: String,
@@ -44,32 +45,23 @@ class ProtocolDiscoveryEngine(
         observedTransports.add(transport)
 
         // 1. Sanitize payload
-        val sanitized = SensitiveDataRedactor.sanitizePayload(rawPayload)
+        val sanitized = SensitiveDataRedactor.sanitizePayload(cleanSocketIoPrefix(rawPayload))
         val fieldMap = SensitiveDataRedactor.extractFieldPaths(sanitized)
 
-        // 2. Discover message type / opcode
+        // 2. Discover message metadata & values
         val eventType = discoverEventType(sanitized, fieldMap, transport)
         val command = discoverCommand(fieldMap)
         val extractedMultiplier = discoverMultiplier(sanitized, fieldMap)
         val extractedRoundId = discoverRoundId(fieldMap)
-
-        if (extractedMultiplier != null && extractedMultiplier > 1.0) {
-            currentMultiplier = extractedMultiplier
-        }
-
         val isCrashSignal = detectCrashSignal(sanitized, fieldMap)
-        val isStartSignal = detectStartSignal(sanitized, fieldMap, extractedMultiplier)
 
-        // 3. State Machine transitions
-        if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
-            transitionToCrash(timestamp)
-        } else if (isStartSignal && (currentState == GameState.CRASH || currentState == GameState.ROUND_COMPLETE || currentState == GameState.UNKNOWN)) {
-            val newRoundId = extractedRoundId ?: "rnd_${syntheticRoundCounter.getAndIncrement()}"
-            transitionToStart(newRoundId, timestamp)
+        // 3. Robust State Transitions
+        if (extractedMultiplier != null && extractedMultiplier >= 1.0) {
+            handleMultiplierUpdate(extractedMultiplier, extractedRoundId, timestamp)
+        } else if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
+            transitionToCrash(timestamp, currentMultiplier)
         } else if (extractedRoundId != null && extractedRoundId != currentRoundId && currentState != GameState.LIVE) {
             transitionToStart(extractedRoundId, timestamp)
-        } else if (currentState == GameState.ROUND_START && (currentMultiplier > 1.0 || eventType.contains("FLY", ignoreCase = true))) {
-            transitionToLive()
         }
 
         // 4. Construct LiveEvent
@@ -109,6 +101,46 @@ class ProtocolDiscoveryEngine(
         return event
     }
 
+    private fun handleMultiplierUpdate(newMultiplier: Double, roundIdCandidate: String?, timestamp: Long) {
+        when (currentState) {
+            GameState.UNKNOWN -> {
+                val rid = roundIdCandidate ?: "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                transitionToStart(rid, timestamp)
+                currentMultiplier = newMultiplier
+                transitionToLive()
+            }
+            GameState.ROUND_START -> {
+                currentMultiplier = newMultiplier
+                if (newMultiplier > 1.0) {
+                    transitionToLive()
+                }
+            }
+            GameState.LIVE -> {
+                // Check if multiplier reset or dropped back to 1.00x after climbing!
+                if (currentMultiplier > 1.10 && newMultiplier <= 1.05) {
+                    // Multiplier reset indicates previous round crashed!
+                    val crashMultiplier = currentMultiplier
+                    transitionToCrash(timestamp, crashMultiplier)
+
+                    // Start new round
+                    val nextRoundId = roundIdCandidate ?: "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                    transitionToStart(nextRoundId, timestamp)
+                    currentMultiplier = newMultiplier
+                    transitionToLive()
+                } else {
+                    currentMultiplier = newMultiplier
+                }
+            }
+            GameState.CRASH, GameState.ROUND_COMPLETE, GameState.NEXT_ROUND -> {
+                // If multiplier is active again, transition to next round
+                val nextRoundId = roundIdCandidate ?: "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                transitionToStart(nextRoundId, timestamp)
+                currentMultiplier = newMultiplier
+                transitionToLive()
+            }
+        }
+    }
+
     private fun transitionToStart(newRoundId: String, timestamp: Long) {
         val prev = currentState
         currentState = GameState.ROUND_START
@@ -135,15 +167,16 @@ class ProtocolDiscoveryEngine(
         listener?.onStateChanged(prev, currentState, currentRoundId, currentMultiplier)
     }
 
-    private fun transitionToCrash(timestamp: Long) {
+    private fun transitionToCrash(timestamp: Long, finalMultiplier: Double) {
         val prev = currentState
         currentState = GameState.CRASH
         lastCrashTimestamp = timestamp
+        currentMultiplier = finalMultiplier
 
         activeRound?.let {
             it.endTime = timestamp
-            it.durationMs = timestamp - it.startTime
-            it.finalMultiplier = currentMultiplier
+            it.durationMs = (timestamp - it.startTime).coerceAtLeast(100L)
+            it.finalMultiplier = finalMultiplier
             it.crashDetected = true
             it.status = "RECORDED"
         }
@@ -157,7 +190,7 @@ class ProtocolDiscoveryEngine(
             }
         }
 
-        listener?.onRoundCrashDetected(currentRoundId, currentMultiplier, timestamp)
+        listener?.onRoundCrashDetected(currentRoundId, finalMultiplier, timestamp)
         listener?.onStateChanged(prev, currentState, currentRoundId, currentMultiplier)
     }
 
@@ -169,14 +202,22 @@ class ProtocolDiscoveryEngine(
         return r
     }
 
+    private fun cleanSocketIoPrefix(raw: String?): String? {
+        if (raw == null) return null
+        val trimmed = raw.trim()
+        // Strip Socket.IO prefixes like 42[...] or 43[...] or 0{...}
+        val idx = trimmed.indexOfAny(charArrayOf('{', '['))
+        return if (idx in 1..4) trimmed.substring(idx) else trimmed
+    }
+
     private fun discoverEventType(sanitized: String, fields: Map<String, String>, transport: String): String {
         for (key in listOf("type", "event", "action", "msg_type", "message_type", "cmd", "op")) {
             fields[key]?.let { if (it.isNotBlank()) return it }
         }
-        if (sanitized.contains("crash", ignoreCase = true) || sanitized.contains("flew_away", ignoreCase = true)) {
+        if (sanitized.contains("crash", ignoreCase = true) || sanitized.contains("flew_away", ignoreCase = true) || sanitized.contains("flew away", ignoreCase = true)) {
             return "GAME_CRASH"
         }
-        if (sanitized.contains("multiplier", ignoreCase = true) || sanitized.contains("coefficient", ignoreCase = true)) {
+        if (sanitized.contains("multiplier", ignoreCase = true) || sanitized.contains("coefficient", ignoreCase = true) || sanitized.contains("DOM_MULTIPLIER", ignoreCase = true)) {
             return "MULTIPLIER_UPDATE"
         }
         if (sanitized.contains("bet", ignoreCase = true)) {
@@ -193,19 +234,28 @@ class ProtocolDiscoveryEngine(
     }
 
     private fun discoverMultiplier(sanitized: String, fields: Map<String, String>): Double? {
-        for (key in listOf("multiplier", "rate", "coefficient", "odds", "x", "val", "v")) {
-            fields[key]?.let {
-                it.toDoubleOrNull()?.let { num ->
+        // Direct field checking
+        for (key in listOf("multiplier", "rate", "coefficient", "odds", "x", "val", "v", "text", "rawText")) {
+            fields[key]?.let { v ->
+                val cleaned = v.replace("x", "", ignoreCase = true).replace("@", "").trim()
+                cleaned.toDoubleOrNull()?.let { num ->
                     if (num in 1.0..100000.0) return num
                 }
             }
         }
-        // Fallback regex matching e.g. "1.45x" or "\"x\": 1.45"
-        val regex = Regex("""(?:multiplier|x|coef)["']?\s*[:=]\s*["']?([0-9]+\.[0-9]+)""", RegexOption.IGNORE_CASE)
-        val match = regex.find(sanitized)
-        if (match != null) {
-            return match.groupValues[1].toDoubleOrNull()
+
+        // Regex pattern 1: "1.45x" or "10.50 X"
+        val m1 = multRegex1.find(sanitized)
+        if (m1 != null) {
+            m1.groupValues[1].toDoubleOrNull()?.let { return it }
         }
+
+        // Regex pattern 2: "multiplier": 1.45
+        val m2 = multRegex2.find(sanitized)
+        if (m2 != null) {
+            m2.groupValues[1].toDoubleOrNull()?.let { return it }
+        }
+
         return null
     }
 
@@ -218,31 +268,19 @@ class ProtocolDiscoveryEngine(
 
     private fun detectCrashSignal(sanitized: String, fields: Map<String, String>): Boolean {
         for ((k, v) in fields) {
-            if (k.contains("status", ignoreCase = true) || k.contains("state", ignoreCase = true) || k.contains("event", ignoreCase = true)) {
+            if (k.contains("status", ignoreCase = true) || k.contains("state", ignoreCase = true) || k.contains("event", ignoreCase = true) || k.contains("type", ignoreCase = true)) {
                 if (v.equals("crash", ignoreCase = true) ||
                     v.equals("crashed", ignoreCase = true) ||
                     v.equals("flew_away", ignoreCase = true) ||
+                    v.equals("flew away", ignoreCase = true) ||
+                    v.equals("DOM_CRASH_SIGNAL", ignoreCase = true) ||
                     v.equals("finish", ignoreCase = true) ||
                     v.equals("ended", ignoreCase = true)) {
                     return true
                 }
             }
         }
-        return sanitized.contains("flew away", ignoreCase = true) || sanitized.contains("\"crash\"", ignoreCase = true)
-    }
-
-    private fun detectStartSignal(sanitized: String, fields: Map<String, String>, multiplier: Double?): Boolean {
-        for ((k, v) in fields) {
-            if (k.contains("status", ignoreCase = true) || k.contains("state", ignoreCase = true) || k.contains("event", ignoreCase = true)) {
-                if (v.equals("start", ignoreCase = true) ||
-                    v.equals("flying", ignoreCase = true) ||
-                    v.equals("run", ignoreCase = true) ||
-                    v.equals("running", ignoreCase = true) ||
-                    v.equals("new_round", ignoreCase = true)) {
-                    return true
-                }
-            }
-        }
-        return (multiplier != null && multiplier in 1.0..1.05 && currentState == GameState.CRASH)
+        val lower = sanitized.lowercase()
+        return lower.contains("flew away") || lower.contains("flew-away") || lower.contains("\"crash\"") || lower.contains("dom_crash_signal")
     }
 }

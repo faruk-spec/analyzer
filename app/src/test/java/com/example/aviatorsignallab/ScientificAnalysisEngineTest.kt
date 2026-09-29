@@ -49,6 +49,24 @@ class ScientificAnalysisEngineTest {
         assertTrue(summaryInsufficient.conclusion.contains("INSUFFICIENT"))
     }
 
+    @Test
+    fun testProtocolEngineCapturesRoundsOnMultiplierReset() {
+        val engine = com.example.aviatorsignallab.protocol.ProtocolDiscoveryEngine()
+
+        // 1. Initial multiplier event
+        engine.processRawEvent("DOM", "INTERNAL", """{"text":"1.05x"}""", 1000L)
+        assertEquals(com.example.aviatorsignallab.protocol.GameState.LIVE, engine.currentState)
+        assertEquals(1.05, engine.currentMultiplier, 0.01)
+
+        // 2. Flight progression
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"multiplier":2.45}""", 3000L)
+        assertEquals(2.45, engine.currentMultiplier, 0.01)
+
+        // 3. Reset back to 1.00x -> Crash of previous round and start of next!
+        engine.processRawEvent("DOM", "INTERNAL", """{"text":"1.00x"}""", 5000L)
+        assertEquals(com.example.aviatorsignallab.protocol.GameState.LIVE, engine.currentState)
+    }
+
     private fun createEvent(timestamp: Long, relToCrash: Long, isPost: Boolean = false): LiveEvent {
         return LiveEvent(
             roundId = "rnd_1",

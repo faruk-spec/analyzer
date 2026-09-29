@@ -3,10 +3,9 @@ package com.example.aviatorsignallab.webview
 object ScriptInjector {
 
     /**
-     * Complete non-invasive client-side telemetry script.
-     * Hooks WebSocket, Fetch, XMLHttpRequest, EventSource, and postMessage.
-     * Captures only client-visible network metadata and game state messages.
-     * Strictly avoids modifying or injecting any traffic.
+     * Enhanced non-invasive client-side telemetry script.
+     * Hooks WebSocket, Fetch, XMLHttpRequest, EventSource, postMessage, and DOM.
+     * Supports child iframes, Socket.IO frames, and visual multiplier extraction.
      */
     val INJECTION_SCRIPT: String = """
         (function() {
@@ -15,9 +14,20 @@ object ScriptInjector {
 
             function safeDispatch(transport, direction, payload, size) {
                 try {
+                    var strPayload = typeof payload === 'string' ? payload : JSON.stringify(payload);
+                    var payloadSize = size || (strPayload ? strPayload.length : 0);
+
                     if (window.AndroidBridge && window.AndroidBridge.onNetworkEvent) {
-                        var strPayload = typeof payload === 'string' ? payload : JSON.stringify(payload);
-                        window.AndroidBridge.onNetworkEvent(transport, direction, strPayload || '', size || (strPayload ? strPayload.length : 0));
+                        window.AndroidBridge.onNetworkEvent(transport, direction, strPayload || '', payloadSize);
+                    } else if (window.top && window.top !== window) {
+                        // Forward from cross-origin iframe to top window
+                        window.top.postMessage({
+                            __aviatorLabEvent: true,
+                            transport: transport,
+                            direction: direction,
+                            payload: strPayload || '',
+                            size: payloadSize
+                        }, '*');
                     }
                 } catch(e) {}
             }
@@ -26,40 +36,71 @@ object ScriptInjector {
                 try {
                     if (window.AndroidBridge && window.AndroidBridge.onDiagnostics) {
                         window.AndroidBridge.onDiagnostics(msg);
+                    } else if (window.top && window.top !== window) {
+                        window.top.postMessage({ __aviatorLabDiag: true, msg: msg }, '*');
                     }
                 } catch(e) {}
             }
 
-            safeLog("Instrumenting client-side network hooks in context: " + window.location.href);
+            safeLog("Instrumenting client-side network hooks in: " + window.location.href);
 
-            // 1. Hook WebSocket
+            // Listener for cross-iframe forwarded events
+            window.addEventListener('message', function(event) {
+                try {
+                    if (event.data && event.data.__aviatorLabEvent) {
+                        safeDispatch(event.data.transport, event.data.direction, event.data.payload, event.data.size);
+                    } else if (event.data && event.data.__aviatorLabDiag) {
+                        safeLog(event.data.msg);
+                    }
+                } catch(e) {}
+            });
+
+            // 1. Hook WebSocket (Constructor, send, addEventListener, and .onmessage property)
             if (window.WebSocket) {
                 var OriginalWebSocket = window.WebSocket;
                 window.WebSocket = function(url, protocols) {
                     var ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
-                    safeLog("WebSocket connection opened to: " + url);
+                    safeLog("WebSocket connected to: " + url);
                     safeDispatch("WEBSOCKET", "INTERNAL", JSON.stringify({ event: "CONNECT", url: url }), 0);
 
-                    // Hook send (outgoing)
+                    // Hook send
                     var origSend = ws.send;
                     ws.send = function(data) {
                         try {
                             var size = (data && data.length) ? data.length : ((data && data.byteLength) ? data.byteLength : 0);
-                            var preview = typeof data === 'string' ? data : "[BINARY_DATA " + size + " bytes]";
+                            var preview = typeof data === 'string' ? data : "[BINARY_OUT " + size + " bytes]";
                             safeDispatch("WEBSOCKET", "OUTGOING", preview, size);
                         } catch(e) {}
                         return origSend.apply(this, arguments);
                     };
 
-                    // Hook message listener
-                    ws.addEventListener('message', function(event) {
+                    // Handler for incoming messages
+                    function handleIncoming(event) {
                         try {
                             var data = event.data;
                             var size = (data && data.length) ? data.length : ((data && data.byteLength) ? data.byteLength : 0);
-                            var preview = typeof data === 'string' ? data : "[BINARY_DATA " + size + " bytes]";
+                            var preview = typeof data === 'string' ? data : "[BINARY_IN " + size + " bytes]";
                             safeDispatch("WEBSOCKET", "INCOMING", preview, size);
                         } catch(e) {}
-                    });
+                    }
+
+                    ws.addEventListener('message', handleIncoming);
+
+                    // Intercept direct assignments like ws.onmessage = function(...)
+                    var internalOnMessage = null;
+                    try {
+                        Object.defineProperty(ws, 'onmessage', {
+                            get: function() { return internalOnMessage; },
+                            set: function(handler) {
+                                internalOnMessage = function(evt) {
+                                    handleIncoming(evt);
+                                    if (typeof handler === 'function') {
+                                        handler.apply(this, arguments);
+                                    }
+                                };
+                            }
+                        });
+                    } catch(e) {}
 
                     return ws;
                 };
@@ -84,8 +125,11 @@ object ScriptInjector {
                         try {
                             var clone = response.clone();
                             clone.text().then(function(bodyText) {
-                                if (url.indexOf("aviator") !== -1 || url.indexOf("game") !== -1 || bodyText.indexOf("multiplier") !== -1 || bodyText.indexOf("crash") !== -1) {
-                                    safeDispatch("FETCH", "INCOMING", bodyText, bodyText.length);
+                                if (bodyText && bodyText.length > 0 && bodyText.length < 50000) {
+                                    // Capture game telemetry responses
+                                    if (bodyText.indexOf('multiplier') !== -1 || bodyText.indexOf('crash') !== -1 || bodyText.indexOf('round') !== -1 || url.indexOf('game') !== -1 || url.indexOf('aviator') !== -1) {
+                                        safeDispatch("FETCH", "INCOMING", bodyText, bodyText.length);
+                                    }
                                 }
                             }).catch(function(){});
                         } catch(e) {}
@@ -116,8 +160,10 @@ object ScriptInjector {
                     this.addEventListener('load', function() {
                         try {
                             var text = self.responseText;
-                            if (text && (self.__xhrUrl.indexOf("aviator") !== -1 || text.indexOf("multiplier") !== -1 || text.indexOf("crash") !== -1)) {
-                                safeDispatch("XHR", "INCOMING", text, text.length);
+                            if (text && text.length > 0 && text.length < 50000) {
+                                if (text.indexOf('multiplier') !== -1 || text.indexOf('crash') !== -1 || text.indexOf('round') !== -1 || (self.__xhrUrl && self.__xhrUrl.indexOf('game') !== -1)) {
+                                    safeDispatch("XHR", "INCOMING", text, text.length);
+                                }
                             }
                         } catch(e) {}
                     });
@@ -126,33 +172,76 @@ object ScriptInjector {
                 };
             }
 
-            // 4. Hook postMessage (for cross-iframe communication)
+            // 4. Hook postMessage communication
             window.addEventListener('message', function(event) {
                 try {
-                    var data = event.data;
-                    var str = typeof data === 'string' ? data : JSON.stringify(data);
-                    if (str && (str.indexOf("multiplier") !== -1 || str.indexOf("crash") !== -1 || str.indexOf("round") !== -1 || str.indexOf("stage") !== -1)) {
-                        safeDispatch("POST_MESSAGE", "INCOMING", str, str.length);
+                    if (event.data && !event.data.__aviatorLabEvent && !event.data.__aviatorLabDiag) {
+                        var str = typeof event.data === 'string' ? event.data : JSON.stringify(event.data);
+                        if (str && str.length > 0) {
+                            safeDispatch("POST_MESSAGE", "INCOMING", str, str.length);
+                        }
                     }
                 } catch(e) {}
             });
 
-            // 5. DOM Stage Monitor
-            var lastMultiplierText = "";
+            // 5. Universal Visual Multiplier & State Scanner (Runs in top frame and all iframes)
+            var lastMultiplierSeen = "";
+            var multRegex = /([0-9]{1,4}\.[0-9]{1,2})\s*[xX]/;
+
             setInterval(function() {
                 try {
-                    // Check for typical Aviator stage / multiplier elements
-                    var candidateElements = document.querySelectorAll('.multiplier, .stage, .payout, [class*="stage"], [class*="crash"], [class*="payout"]');
-                    for (var i = 0; i < candidateElements.length; i++) {
-                        var txt = candidateElements[i].innerText || candidateElements[i].textContent;
-                        if (txt && txt !== lastMultiplierText && (txt.indexOf('x') !== -1 || txt.indexOf('X') !== -1)) {
-                            lastMultiplierText = txt;
-                            safeDispatch("DOM", "INTERNAL", JSON.stringify({ type: "DOM_STAGE_UPDATE", text: txt }), txt.length);
+                    var doc = document;
+                    // Scan candidate elements
+                    var els = doc.querySelectorAll('div, span, p, h1, h2, h3, [class*="stage"], [class*="crash"], [class*="payout"], [class*="multiplier"], [class*="odds"], [class*="flew"]');
+                    for (var i = 0; i < els.length; i++) {
+                        var text = els[i].innerText || els[i].textContent;
+                        if (!text || text.length > 40) continue;
+
+                        var match = multRegex.exec(text);
+                        if (match && match[1] !== lastMultiplierSeen) {
+                            lastMultiplierSeen = match[1];
+                            safeDispatch("DOM", "INTERNAL", JSON.stringify({
+                                type: "DOM_MULTIPLIER_UPDATE",
+                                multiplier: match[1],
+                                rawText: text.trim()
+                            }), text.length);
                             break;
+                        }
+
+                        // Check for crash keywords on screen
+                        var lower = text.toLowerCase();
+                        if (lower.indexOf("flew away") !== -1 || lower.indexOf("crashed") !== -1 || lower.indexOf("flew-away") !== -1) {
+                            if (lastMultiplierSeen !== "CRASH") {
+                                lastMultiplierSeen = "CRASH";
+                                safeDispatch("DOM", "INTERNAL", JSON.stringify({
+                                    type: "DOM_CRASH_SIGNAL",
+                                    status: "crash",
+                                    rawText: text.trim()
+                                }), text.length);
+                                break;
+                            }
                         }
                     }
                 } catch(e) {}
-            }, 250);
+            }, 100);
+
+            // 6. Child iframe recursive injector (for same-origin or reachable iframes)
+            setInterval(function() {
+                try {
+                    var iframes = document.querySelectorAll('iframe');
+                    for (var j = 0; j < iframes.length; j++) {
+                        try {
+                            var win = iframes[j].contentWindow;
+                            if (win && !win.__aviatorLabInstrumented) {
+                                safeLog("Injecting into child iframe: " + (iframes[j].src || "inline"));
+                                win.eval("(" + arguments.callee.caller.toString() + ")()");
+                            }
+                        } catch(e) {
+                            // Cross-origin: Handled by WebViewCompat.addDocumentStartJavaScript
+                        }
+                    }
+                } catch(e) {}
+            }, 1000);
 
         })();
     """.trimIndent()
