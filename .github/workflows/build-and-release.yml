@@ -1,0 +1,133 @@
+name: Build and Release Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create GitHub Release with APK'
+        required: true
+        type: boolean
+        default: false
+      release_tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: false
+        type: string
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    name: Build & Test APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make Gradle Executable
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew test --stacktrace
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aviator-signal-lab-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aviator-signal-lab-release
+          path: app/build/outputs/apk/release/app-release*.apk
+          retention-days: 30
+
+      - name: Prepare Release Assets
+        if: (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true')
+        id: release_prep
+        run: |
+          mkdir -p release_assets
+          # Find release apk or fallback to debug apk if signing wasn't configured
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk release_assets/AviatorSignalLab.apk
+          elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk release_assets/AviatorSignalLab.apk
+          else
+            cp app/build/outputs/apk/debug/app-debug.apk release_assets/AviatorSignalLab.apk
+          fi
+
+          TAG_NAME="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG_NAME="${{ github.event.inputs.release_tag }}"
+          fi
+
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          # Generate release metadata JSON for in-app update checker
+          cat <<EOF > release_assets/latest_release.json
+          {
+            "versionCode": 1,
+            "versionName": "1.0.0",
+            "releaseNotes": "Aviator Signal Lab initial release. Real-time network observability, pre-crash window feature extraction (T-0.1s to T-5.0s), empirical significance testing, and leakage-proof offline analysis.",
+            "apkUrl": "https://github.com/${{ github.repository }}/releases/download/$TAG_NAME/AviatorSignalLab.apk",
+            "publishedAt": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          }
+          EOF
+
+      - name: Create GitHub Release
+        if: (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_prep.outputs.tag_name }}
+          name: Release ${{ steps.release_prep.outputs.tag_name }}
+          body: |
+            ## Aviator Signal Lab - Scientific Network Observability & Pre-Crash Analyzer
+            
+            ### Highlights
+            - Passive client-side network observability (WebSocket, Fetch, XHR, EventSource, postMessage)
+            - Multi-window pre-crash activity analysis (T-0.1s to T-5.0s) vs matched control windows
+            - Strict leakage prevention ($T \ge T_{crash}$ marked POST_CRASH and excluded)
+            - Honest empirical reporting: identifies repeatable signals or reports "No Reliable Signal"
+            - In-app version checking & update installation
+            - Full CSV and ZIP dataset export
+            
+            *Automated build by GitHub Actions.*
+          files: |
+            release_assets/AviatorSignalLab.apk
+            release_assets/latest_release.json
+          draft: false
+          prerelease: false

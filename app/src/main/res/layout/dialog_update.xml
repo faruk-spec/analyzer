@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_card"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:id="@+id/tvUpdateTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="New Version Available"
+        android:textColor="@color/accent_cyan"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvVersionComparison"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="Current: v1.0.0 (1) → New: v1.0.1 (2)"
+        android:textColor="@color/text_primary"
+        android:textSize="13sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="Release Notes:"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvReleaseNotes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:maxHeight="120dp"
+        android:scrollbars="vertical"
+        android:text="Bug fixes and performance improvements."
+        android:textColor="@color/text_muted"
+        android:textSize="12sp" />
+
+    <ProgressBar
+        android:id="@+id/pbDownloadProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="14dp"
+        android:indeterminate="false"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tvDownloadStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Downloading update..."
+        android:textColor="@color/accent_emerald"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnUpdateLater"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="LATER"
+            android:textColor="@color/text_muted"
+            app:backgroundTint="@color/bg_secondary"
+            xmlns:app="http://schemas.android.com/apk/res-auto" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnUpdateNow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="UPDATE NOW"
+            android:textColor="@color/bg_primary"
+            android:textStyle="bold"
+            app:backgroundTint="@color/accent_cyan"
+            xmlns:app="http://schemas.android.com/apk/res-auto" />
+
+    </LinearLayout>
+
+</LinearLayout>

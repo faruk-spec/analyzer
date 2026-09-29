@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/bottomSheetContainer"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_card"
+    android:orientation="vertical"
+    android:padding="16dp"
+    app:behavior_hideable="true"
+    app:behavior_peekHeight="72dp"
+    app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+    <!-- Drag Handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="12dp"
+        android:background="@color/text_muted" />
+
+    <!-- Sheet Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Scientific Research Panel"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvSheetRoundsAnalyzed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 crash rounds"
+            android:textColor="@color/accent_cyan"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="420dp"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Activity Signal Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:backgroundTint="@color/bg_secondary"
+                android:orientation="vertical"
+                android:padding="14dp"
+                android:layout_marginBottom="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ACTIVITY SIGNAL (T-0.1s to T-5.0s PRE-CRASH)"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSignalConclusion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/sig_no_signal"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSignalDetails"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Scientific verification: Testing pre-crash network activity vs random live control periods."
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp" />
+
+                <!-- Verification Stats Table -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Out-of-Sample Prec"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp" />
+                        <TextView
+                            android:id="@+id/tvOutOfSamplePrec"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0.00"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="False Positive Rate"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp" />
+                        <TextView
+                            android:id="@+id/tvFalsePositiveRate"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0.0%"
+                            android:textColor="@color/accent_rose"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Confidence"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp" />
+                        <TextView
+                            android:id="@+id/tvConfidenceLevel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="LOW"
+                            android:textColor="@color/text_muted"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Quick Controls (Open, Reload, Pause/Resume) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="10dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSheetReload"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:text="@string/btn_reload"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/bg_secondary"
+                    app:strokeColor="@color/bg_card_border"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSheetPauseResume"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:text="@string/btn_pause"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/bg_secondary"
+                    app:strokeColor="@color/bg_card_border"
+                    app:strokeWidth="1dp" />
+            </LinearLayout>
+
+            <!-- Export Buttons Grid -->
+            <GridLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="2"
+                android:rowCount="2"
+                android:layout_marginBottom="10dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnExportRoundsCsv"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_marginEnd="4dp"
+                    android:layout_marginBottom="6dp"
+                    android:text="@string/btn_rounds_csv"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/bg_card"
+                    app:strokeColor="@color/bg_card_border"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnExportEventsCsv"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginBottom="6dp"
+                    android:text="@string/btn_events_csv"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/bg_card"
+                    app:strokeColor="@color/bg_card_border"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnExportFeaturesCsv"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_marginEnd="4dp"
+                    android:text="@string/btn_features_csv"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/bg_card"
+                    app:strokeColor="@color/bg_card_border"
+                    app:strokeWidth="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnExportProtocolCsv"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_marginStart="4dp"
+                    android:text="@string/btn_protocol_csv"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/bg_card"
+                    app:strokeColor="@color/bg_card_border"
+                    app:strokeWidth="1dp" />
+
+            </GridLayout>
+
+            <!-- EXPORT ALL (ZIP) Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnExportAllZip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="@string/btn_export_all"
+                android:textColor="@color/bg_primary"
+                android:textStyle="bold"
+                app:backgroundTint="@color/accent_cyan"
+                app:icon="@drawable/ic_download"
+                app:iconTint="@color/bg_primary" />
+
+            <!-- Clear Database Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnClearData"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_clear_data"
+                android:textColor="@color/accent_rose"
+                app:backgroundTint="@color/bg_card"
+                app:strokeColor="@color/accent_rose"
+                app:strokeWidth="1dp" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>

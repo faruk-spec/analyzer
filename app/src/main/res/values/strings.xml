@@ -1,0 +1,34 @@
+<resources>
+    <string name="app_name">Aviator Signal Lab</string>
+    <string name="header_subtitle">Real-Time Scientific Observability &amp; Pre-Crash Analysis</string>
+    <string name="target_website_label">damansuperstar1.com</string>
+    <string name="status_connected">CONNECTED</string>
+    <string name="status_disconnected">DISCONNECTED</string>
+    <string name="status_capturing">OBSERVING</string>
+    <string name="status_paused">PAUSED</string>
+
+    <string name="metric_rounds">Rounds</string>
+    <string name="metric_events">Events</string>
+    <string name="metric_cur_round">Current Round</string>
+    <string name="metric_cur_mult">Multiplier</string>
+    <string name="metric_elapsed">Elapsed</string>
+    <string name="metric_event_rate">Event Rate</string>
+
+    <string name="sig_title">ACTIVITY SIGNAL STATUS</string>
+    <string name="sig_no_signal">NO RELIABLE PRE-CRASH ACTIVITY SIGNAL DETECTED</string>
+    <string name="sig_candidate">POSSIBLE ACTIVITY CANDIDATE</string>
+    <string name="sig_analyzing">GATHERING CHRONOLOGICAL ROUNDS…</string>
+
+    <string name="btn_open">Open</string>
+    <string name="btn_reload">Reload</string>
+    <string name="btn_pause">Pause</string>
+    <string name="btn_resume">Resume</string>
+    <string name="btn_rounds_csv">Rounds CSV</string>
+    <string name="btn_events_csv">Live Events CSV</string>
+    <string name="btn_features_csv">Features CSV</string>
+    <string name="btn_protocol_csv">Protocol CSV</string>
+    <string name="btn_export_all">EXPORT ALL (ZIP)</string>
+    <string name="btn_clear_data">Clear Data</string>
+    <string name="btn_diagnostics">Diagnostics</string>
+    <string name="btn_check_update">Check Update</string>
+</resources>

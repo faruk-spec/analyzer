@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootCoordinator"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary">
+
+    <!-- Main Content: Top Bar + Metrics Strip + WebView -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Top App Bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_secondary"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="@string/app_name"
+                android:src="@drawable/ic_flight" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvAppTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvTargetUrl"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/target_website_label"
+                    android:textColor="@color/accent_cyan"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- Status Pill Badge -->
+            <TextView
+                android:id="@+id/tvConnectionStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_status_badge"
+                android:text="@string/status_disconnected"
+                android:textColor="@color/text_muted"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <!-- Diagnostics Action Button -->
+            <ImageButton
+                android:id="@+id/btnOpenDiagnostics"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Diagnostics"
+                android:src="@android:drawable/ic_menu_info_details"
+                app:tint="@color/text_secondary" />
+
+            <!-- Update Action Button -->
+            <ImageButton
+                android:id="@+id/btnCheckUpdate"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Update"
+                android:src="@drawable/ic_download"
+                app:tint="@color/accent_cyan" />
+        </LinearLayout>
+
+        <!-- Real-Time Metrics Strip -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="6dp">
+
+                <!-- Metric: Rounds -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/metric_rounds"
+                        android:textColor="@color/text_muted"
+                        android:textSize="10sp" />
+                    <TextView
+                        android:id="@+id/tvMetricRounds"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Metric: Events -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/metric_events"
+                        android:textColor="@color/text_muted"
+                        android:textSize="10sp" />
+                    <TextView
+                        android:id="@+id/tvMetricEvents"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="@color/accent_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Metric: Current Round -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/metric_cur_round"
+                        android:textColor="@color/text_muted"
+                        android:textSize="10sp" />
+                    <TextView
+                        android:id="@+id/tvMetricCurRound"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="@color/accent_purple"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Metric: Multiplier -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/metric_cur_mult"
+                        android:textColor="@color/text_muted"
+                        android:textSize="10sp" />
+                    <TextView
+                        android:id="@+id/tvMetricMultiplier"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1.00x"
+                        android:textColor="@color/accent_amber"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Metric: Elapsed -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/metric_elapsed"
+                        android:textColor="@color/text_muted"
+                        android:textSize="10sp" />
+                    <TextView
+                        android:id="@+id/tvMetricElapsed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0.0s"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Metric: Rate -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/metric_event_rate"
+                        android:textColor="@color/text_muted"
+                        android:textSize="10sp" />
+                    <TextView
+                        android:id="@+id/tvMetricEventRate"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0 evt/s"
+                        android:textColor="@color/accent_emerald"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- Web Loading Progress -->
+        <ProgressBar
+            android:id="@+id/webProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:indeterminate="false"
+            android:max="100"
+            android:progressDrawable="@drawable/bg_status_badge"
+            android:visibility="gone" />
+
+        <!-- WebView Container -->
+        <FrameLayout
+            android:id="@+id/webViewContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <WebView
+                android:id="@+id/webView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Floating Overlay Button to Expand Research Sheet -->
+            <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+                android:id="@+id/fabResearchPanel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="16dp"
+                android:text="Research Lab"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/bg_card"
+                app:icon="@drawable/ic_flight"
+                app:iconTint="@color/accent_cyan"
+                app:strokeColor="@color/accent_cyan"
+                app:strokeWidth="1dp" />
+
+        </FrameLayout>
+
+    </LinearLayout>
+
+    <!-- Collapsible Research Bottom Sheet -->
+    <include
+        android:id="@+id/bottomSheetResearch"
+        layout="@layout/bottom_sheet_research" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
