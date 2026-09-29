@@ -118,7 +118,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private fun startGapWatcher() {
         gapWatcherJob = viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
-                delay(35)
+                delay(35L)
                 if (protocolEngine.currentState == GameState.LIVE) {
                     protocolEngine.checkInFlightGap(System.currentTimeMillis())
                 }
