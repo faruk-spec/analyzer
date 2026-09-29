@@ -20,6 +20,8 @@ import com.example.aviatorsignallab.protocol.GameState
 import com.example.aviatorsignallab.protocol.ProtocolDiscoveryEngine
 import com.example.aviatorsignallab.protocol.ServerReverseEngine
 import com.example.aviatorsignallab.protocol.StateChangeListener
+import com.example.aviatorsignallab.wingo.WingoProtocolEngine
+import com.example.aviatorsignallab.wingo.WingoTrendAnalyzer
 import com.example.aviatorsignallab.webview.NetworkEventListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -121,6 +123,45 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private val _recentDisassembledPackets = MutableLiveData<List<ServerReverseEngine.DisassembledPacket>>(emptyList())
     val recentDisassembledPackets: LiveData<List<ServerReverseEngine.DisassembledPacket>> = _recentDisassembledPackets
     private val packetDisassemblyBuffer = mutableListOf<ServerReverseEngine.DisassembledPacket>()
+
+    // WinGo / BigSmall Lottery Protocol Engine & LiveData
+    val wingoEngine = WingoProtocolEngine(object : WingoProtocolEngine.WingoListener {
+        override fun onNewDrawResult(result: WingoProtocolEngine.WingoDrawResult) {
+            _latestWingoDraw.postValue(result)
+            val all = wingoEngine.getRecentResults()
+            _wingoHistory.postValue(all)
+            _wingoTrendSummary.postValue(WingoTrendAnalyzer.analyzeTrends(all))
+            _wingoTransitions.postValue(WingoTrendAnalyzer.calculateTransitions(all))
+        }
+
+        override fun onIssueUpdated(issue: WingoProtocolEngine.WingoIssueInfo) {
+            _wingoIssue.postValue(issue)
+        }
+
+        override fun onHistoryLoaded(results: List<WingoProtocolEngine.WingoDrawResult>) {
+            _wingoHistory.postValue(results)
+            _wingoTrendSummary.postValue(WingoTrendAnalyzer.analyzeTrends(results))
+            _wingoTransitions.postValue(WingoTrendAnalyzer.calculateTransitions(results))
+            if (results.isNotEmpty()) {
+                _latestWingoDraw.postValue(results.first())
+            }
+        }
+    })
+
+    private val _latestWingoDraw = MutableLiveData<WingoProtocolEngine.WingoDrawResult?>()
+    val latestWingoDraw: LiveData<WingoProtocolEngine.WingoDrawResult?> = _latestWingoDraw
+
+    private val _wingoIssue = MutableLiveData(WingoProtocolEngine.WingoIssueInfo("--", 0, false, "1m"))
+    val wingoIssue: LiveData<WingoProtocolEngine.WingoIssueInfo> = _wingoIssue
+
+    private val _wingoHistory = MutableLiveData<List<WingoProtocolEngine.WingoDrawResult>>(emptyList())
+    val wingoHistory: LiveData<List<WingoProtocolEngine.WingoDrawResult>> = _wingoHistory
+
+    private val _wingoTrendSummary = MutableLiveData(WingoTrendAnalyzer.analyzeTrends(emptyList()))
+    val wingoTrendSummary: LiveData<WingoTrendAnalyzer.TrendSummary> = _wingoTrendSummary
+
+    private val _wingoTransitions = MutableLiveData(WingoTrendAnalyzer.calculateTransitions(emptyList()))
+    val wingoTransitions: LiveData<WingoTrendAnalyzer.TransitionProbabilities> = _wingoTransitions
 
     fun verifyProvablyFair(serverSeed: String, clientSeed: String, recordedMul: Double): ServerReverseEngine.ProvablyFairResult {
         return ServerReverseEngine.verifyProvablyFair(serverSeed, clientSeed, recordedMul)
@@ -270,6 +311,11 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
         val telemetry = ServerReverseEngine.processPacket(disassembled.opcode, safePayload, protocolEngine.currentMultiplier)
         _betTelemetry.postValue(telemetry)
+
+        // Process WinGo / BigSmall payloads if present
+        if (wingoEngine.isWingoTraffic(item.payload, safePayload)) {
+            wingoEngine.processPayload(transport, item.payload, safePayload)
+        }
 
         // Real-time tick feed: record live multiplier ticks into LiveTickCadenceAnalyzer
         val isMultiplierTick = transport == "WEBSOCKET" && (safePayload.contains("\"cmd\":85") || safePayload.contains("\"mul\""))

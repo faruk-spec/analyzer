@@ -172,7 +172,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginBottom="10dp">
+                android:layout_marginBottom="8dp">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSheetBetExposure"
@@ -200,6 +200,19 @@
                     app:strokeColor="@color/bg_card_border"
                     app:strokeWidth="1dp" />
             </LinearLayout>
+
+            <!-- WinGo / BigSmall Radar Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSheetWingoRadar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="🎯 WinGo / Big-Small Trend Radar"
+                android:textSize="12sp"
+                android:textColor="@color/accent_emerald"
+                app:backgroundTint="@color/bg_secondary"
+                app:strokeColor="@color/accent_emerald"
+                app:strokeWidth="1dp" />
 
             <!-- Quick Controls (Open, Reload, Pause/Resume) -->
             <LinearLayout

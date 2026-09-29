@@ -285,7 +285,9 @@ object ScriptInjector {
                             clone.text().then(function(bodyText) {
                                 if (bodyText && bodyText.length > 0 && bodyText.length < 50000) {
                                     var lower = bodyText.toLowerCase();
-                                    if (lower.indexOf('multiplier') !== -1 || lower.indexOf('crash') !== -1 || lower.indexOf('round') !== -1 || (url && url.toLowerCase().indexOf('aviator') !== -1)) {
+                                    if (lower.indexOf('multiplier') !== -1 || lower.indexOf('crash') !== -1 || lower.indexOf('round') !== -1 || 
+                                        lower.indexOf('wingo') !== -1 || lower.indexOf('lottery') !== -1 || lower.indexOf('issue') !== -1 ||
+                                        (url && (url.toLowerCase().indexOf('aviator') !== -1 || url.toLowerCase().indexOf('wingo') !== -1 || url.toLowerCase().indexOf('lottery') !== -1))) {
                                         safeDispatch("FETCH", "INCOMING", bodyText, bodyText.length);
                                     }
                                 }
@@ -328,7 +330,9 @@ object ScriptInjector {
                                 var text = self.responseText;
                                 if (text && text.length > 0 && text.length < 50000) {
                                     var lower = text.toLowerCase();
-                                    if (lower.indexOf('multiplier') !== -1 || lower.indexOf('crash') !== -1 || lower.indexOf('round') !== -1 || (self.__xhrUrl && self.__xhrUrl.toLowerCase().indexOf('aviator') !== -1)) {
+                                    if (lower.indexOf('multiplier') !== -1 || lower.indexOf('crash') !== -1 || lower.indexOf('round') !== -1 || 
+                                        lower.indexOf('wingo') !== -1 || lower.indexOf('lottery') !== -1 || lower.indexOf('issue') !== -1 ||
+                                        (self.__xhrUrl && (self.__xhrUrl.toLowerCase().indexOf('aviator') !== -1 || self.__xhrUrl.toLowerCase().indexOf('wingo') !== -1 || self.__xhrUrl.toLowerCase().indexOf('lottery') !== -1))) {
                                         safeDispatch("XHR", "INCOMING", text, text.length);
                                     }
                                 }

@@ -424,6 +424,10 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             showProvablyFairDialog()
         }
 
+        sheet.btnSheetWingoRadar.setOnClickListener {
+            showWingoRadarDialog()
+        }
+
         sheet.btnSheetReload.setOnClickListener {
             binding.webView.reload()
             Toast.makeText(this, "Reloading target page...", Toast.LENGTH_SHORT).show()
@@ -900,6 +904,60 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
                     .show()
             }
             .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showWingoRadarDialog() {
+        val issue = viewModel.wingoIssue.value
+        val history = viewModel.wingoHistory.value ?: emptyList()
+        val trend = viewModel.wingoTrendSummary.value
+        val trans = viewModel.wingoTransitions.value
+
+        val sb = StringBuilder()
+        sb.append("🎯 WINGO / BIG-SMALL PROTOCOL TELEMETRY\n")
+        if (issue != null) {
+            val lockStatus = if (issue.isLocked) "🔒 LOCKED (T-5s)" else "🟢 BETTING OPEN"
+            sb.append("Current Period: ${issue.currentPeriod} (${issue.gameType})\n")
+            sb.append("Server Countdown: ${issue.remainingSeconds}s ($lockStatus)\n\n")
+        } else {
+            sb.append("Current Period: Waiting for WinGo traffic...\n\n")
+        }
+
+        if (trend != null && trend.totalRoundsAnalyzed > 0) {
+            sb.append("📊 ROLLING PARITY & STREAK ANALYSIS:\n")
+            sb.append("• Total Draws Recorded: ${trend.totalRoundsAnalyzed}\n")
+            sb.append("• Big Ratio: ${trend.bigRatioPct}% (${trend.bigCount} draws)\n")
+            sb.append("• Small Ratio: ${trend.smallRatioPct}% (${trend.smallCount} draws)\n")
+            sb.append("• Current Streak: ${trend.currentStreakLength}x ${trend.currentStreakType}\n")
+            sb.append("• Max Big Streak: ${trend.maxBigStreak} | Max Small Streak: ${trend.maxSmallStreak}\n")
+
+            if (trend.isDragonActive) {
+                sb.append("⚡ ALERT: 🐉 DRAGON STREAK DETECTED (>= 5x ${trend.currentStreakType})\n")
+            }
+            sb.append("\n")
+        }
+
+        if (trans != null) {
+            sb.append("🔄 EMPIRICAL TRANSITION MATRIX:\n")
+            sb.append("• After Big -> Next Big: ${trans.afterBigNextBigPct}%\n")
+            sb.append("• After Big -> Next Small: ${trans.afterBigNextSmallPct}%\n")
+            sb.append("• After Small -> Next Small: ${trans.afterSmallNextSmallPct}%\n")
+            sb.append("• After Small -> Next Big: ${trans.afterSmallNextBigPct}%\n\n")
+        }
+
+        if (history.isNotEmpty()) {
+            sb.append("📜 RECENT DRAWS (LATEST 8):\n")
+            for (draw in history.take(8)) {
+                sb.append("• #${draw.periodId.takeLast(4)}: ${draw.number} [${draw.size}] (${draw.color})\n")
+            }
+        } else {
+            sb.append("📜 Draw History: Open WinGo / Lottery tab inside WebView to capture live issue streams.\n")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("🎯 WinGo Trend Radar")
+            .setMessage(sb.toString())
+            .setPositiveButton("OK", null)
             .show()
     }
 }
