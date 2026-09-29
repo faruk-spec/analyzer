@@ -124,18 +124,18 @@ class ProtocolDiscoveryEngineTest {
 
         val engine = ProtocolDiscoveryEngine(listener)
 
+        val t0 = 10000L
         // 1. Takeoff
-        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":1,"rbd":"25068823","ttl":5}""")
-        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":2,"mul":"1.00"}""")
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":1,"rbd":"25068823","ttl":5}""", timestamp = t0)
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":2,"mul":"1.00"}""", timestamp = t0 + 1000L)
 
         // 2. Flight tick at 1.45x
-        val now = 1700000000000L
-        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":85,"mul":"1.45"}""", timestamp = now)
+        engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":85,"mul":"1.45"}""", timestamp = t0 + 2000L)
 
         assertEquals(false, alertTriggered)
 
         // 3. Gap check 150ms later without receiving ticks -> pre-crash alert!
-        engine.checkInFlightGap(now + 150L)
+        engine.checkInFlightGap(t0 + 2150L)
 
         assertEquals(true, alertTriggered)
         assertEquals(1.45, alertMult, 0.001)

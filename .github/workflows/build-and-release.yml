@@ -52,7 +52,8 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Unit Tests
-        run: ./gradlew test --stacktrace
+        run: |
+          ./gradlew test --info --stacktrace || (find app/build/reports/tests/ -name "*.html" -exec head -n 120 {} + && exit 1)
 
       - name: Ensure Persistent Signing Keystore
         run: |
