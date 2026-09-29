@@ -10,6 +10,7 @@ import com.example.aviatorsignallab.analysis.LiveTickCadenceAnalyzer
 import com.example.aviatorsignallab.analysis.FeatureExtractor
 import com.example.aviatorsignallab.analysis.TickFreezeResult
 import com.example.aviatorsignallab.analysis.ScientificAnalysisEngine
+import com.example.aviatorsignallab.probability.ProbabilityEngine
 import com.example.aviatorsignallab.export.ZipExportManager
 import com.example.aviatorsignallab.model.GameRound
 import com.example.aviatorsignallab.model.LiveEvent
@@ -82,6 +83,36 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private val _tickFreezeStatus = MutableLiveData<String>("")
     val tickFreezeStatus: LiveData<String> = _tickFreezeStatus
 
+    // Real-Time Probability Engine LiveData
+    private val _userTargetMultiplier = MutableLiveData(2.00)
+    val userTargetMultiplier: LiveData<Double> = _userTargetMultiplier
+
+    private val _survivalEstimate = MutableLiveData(
+        ProbabilityEngine.estimateSurvival(1.00, 2.00)
+    )
+    val survivalEstimate: LiveData<ProbabilityEngine.SurvivalEstimate> = _survivalEstimate
+
+    private val _zoneProbabilities = MutableLiveData(
+        ProbabilityEngine.calculateZoneProbabilities(1.00)
+    )
+    val zoneProbabilities: LiveData<ProbabilityEngine.ZoneProbabilities> = _zoneProbabilities
+
+    private val _empiricalStats = MutableLiveData<ProbabilityEngine.EmpiricalStats?>()
+    val empiricalStats: LiveData<ProbabilityEngine.EmpiricalStats?> = _empiricalStats
+
+    fun setTargetMultiplier(target: Double) {
+        val validTarget = if (target >= 1.05) target else 2.00
+        _userTargetMultiplier.postValue(validTarget)
+        updateProbabilityEstimates(protocolEngine.currentMultiplier, validTarget)
+    }
+
+    fun updateProbabilityEstimates(currentMultiplier: Double, target: Double = _userTargetMultiplier.value ?: 2.00) {
+        val estimate = ProbabilityEngine.estimateSurvival(currentMultiplier, target)
+        val zones = ProbabilityEngine.calculateZoneProbabilities(currentMultiplier)
+        _survivalEstimate.postValue(estimate)
+        _zoneProbabilities.postValue(zones)
+    }
+
     // Traffic Inspector LiveData & buffer
     private val _trafficItems = MutableLiveData<List<TrafficItem>>(emptyList())
     val trafficItems: LiveData<List<TrafficItem>> = _trafficItems
@@ -129,6 +160,11 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             if (patterns.isNotEmpty()) {
                 protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.descriptor })
             }
+
+            // Calibrate empirical statistics from historical captured rounds
+            val allRounds = db.roundDao().getAllRounds()
+            val stats = ProbabilityEngine.analyzeEmpiricalDistribution(allRounds)
+            _empiricalStats.postValue(stats)
         }
     }
 
@@ -352,6 +388,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     override fun onStateChanged(previousState: GameState, newState: GameState, currentRoundId: String, multiplier: Double) {
         _currentRoundId.postValue(currentRoundId)
         _currentMultiplier.postValue(multiplier)
+        updateProbabilityEstimates(multiplier)
 
         if (newState == GameState.LIVE || protocolEngine.currentState == GameState.LIVE) {
             liveTickAnalyzer.recordTick(System.currentTimeMillis())
@@ -371,6 +408,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _currentMultiplier.postValue(1.00)
         _elapsedSeconds.postValue(0.0)
         _preCrashAlert.postValue(null)
+        updateProbabilityEstimates(1.00)
 
         // Reset alert guards for the new round
         prepareAlertFiredForRound.set(false)
@@ -449,6 +487,11 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             }
             _researchSummary.postValue(summary)
             _totalRounds.postValue(totalRCount)
+
+            // Recalculate empirical statistics with new crash round
+            val allRounds = db.roundDao().getAllRounds()
+            val stats = ProbabilityEngine.analyzeEmpiricalDistribution(allRounds)
+            _empiricalStats.postValue(stats)
 
             // Diagnostics for live round tick cadence
             val cadenceDiag = liveTickAnalyzer.getDiagnostics()

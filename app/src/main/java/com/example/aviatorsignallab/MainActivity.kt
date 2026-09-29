@@ -18,6 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.aviatorsignallab.databinding.ActivityMainBinding
+import com.example.aviatorsignallab.probability.ProbabilityEngine
 import com.example.aviatorsignallab.ui.DiagnosticsDialog
 import com.example.aviatorsignallab.ui.ResearchViewModel
 import com.example.aviatorsignallab.ui.TrafficInspectorDialog
@@ -305,6 +306,34 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
             }
         }
+
+        // Real-Time Mathematical Survival Probability Observer
+        viewModel.survivalEstimate.observe(this) { est ->
+            if (est != null && viewModel.connectionStatus.value != "STANDBY" && viewModel.currentRoundId.value != "--") {
+                val probText = "${est.milestoneSurvivalPct.toInt()}% → ${"%.2f".format(est.nextMilestone)}x"
+                binding.tvMetricProb.text = probText
+                binding.tvBubbleProb.text = "${est.milestoneSurvivalPct.toInt()}%"
+
+                val targetText = "${"%.2f".format(est.targetMultiplier)}x (${est.targetHitPct.toInt()}%)"
+                binding.tvMetricTarget.text = targetText
+
+                val colorRes = when (est.riskLevel) {
+                    ProbabilityEngine.RiskLevel.SAFE -> R.color.accent_emerald
+                    ProbabilityEngine.RiskLevel.MODERATE -> R.color.accent_amber
+                    ProbabilityEngine.RiskLevel.HIGH -> R.color.accent_rose
+                    ProbabilityEngine.RiskLevel.EXTREME -> R.color.accent_purple
+                }
+                binding.tvMetricProb.setTextColor(ContextCompat.getColor(this, colorRes))
+                binding.tvBubbleProb.setTextColor(ContextCompat.getColor(this, colorRes))
+            } else {
+                binding.tvMetricProb.text = "--%"
+                binding.tvBubbleProb.text = "--%"
+                val curTarget = viewModel.userTargetMultiplier.value ?: 2.00
+                binding.tvMetricTarget.text = "${"%.2f".format(curTarget)}x (--%)"
+                binding.tvMetricProb.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+                binding.tvBubbleProb.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+            }
+        }
     }
 
     private fun triggerPrepareVibration() {
@@ -369,6 +398,14 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Round ID", rid))
                 Toast.makeText(this, "Copied Round ID: $rid", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        binding.chipSurvivalProb.setOnClickListener {
+            showProbabilityDetailsDialog()
+        }
+
+        binding.chipTargetSelector.setOnClickListener {
+            showTargetMultiplierPicker()
         }
 
         binding.btnOpenDiagnostics.setOnClickListener {
@@ -698,5 +735,66 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
     override fun onConsoleLog(level: String, message: String, sourceId: String, lineNumber: Int) {
         viewModel.onDiagnosticsReceived("[$level] $sourceId:$lineNumber - $message")
+    }
+
+    private fun showTargetMultiplierPicker() {
+        val targets = arrayOf("1.50x", "1.80x", "2.00x (Standard)", "2.50x", "3.00x", "5.00x", "10.00x", "20.00x (Moonshot)")
+        val values = doubleArrayOf(1.50, 1.80, 2.00, 2.50, 3.00, 5.00, 10.00, 20.00)
+
+        AlertDialog.Builder(this)
+            .setTitle("🎯 Target Cashout Multiplier")
+            .setItems(targets) { _, which ->
+                val selected = values[which]
+                viewModel.setTargetMultiplier(selected)
+                Toast.makeText(this, "Target set to ${"%.2f".format(selected)}x", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showProbabilityDetailsDialog() {
+        val est = viewModel.survivalEstimate.value
+        val zones = viewModel.zoneProbabilities.value
+        val stats = viewModel.empiricalStats.value
+        val currentMult = viewModel.currentMultiplier.value ?: 1.00
+
+        val sb = StringBuilder()
+        sb.append("✈️ FLIGHT TELEMETRY\n")
+        sb.append("Current Multiplier: ${"%.2f".format(currentMult)}x\n")
+        if (est != null) {
+            sb.append("Next Milestone: ${"%.2f".format(est.nextMilestone)}x (Survival: ${est.milestoneSurvivalPct}%)\n")
+            sb.append("Target Multiplier: ${"%.2f".format(est.targetMultiplier)}x (Hit Probability: ${est.targetHitPct}%)\n")
+            sb.append("Current Risk Tier: ${est.riskLevel.name}\n\n")
+        }
+
+        if (zones != null) {
+            sb.append("🎯 4-ZONE RESIDUAL PROBABILITY\n")
+            sb.append("🛡️ Safe Zone [1.00x - 2.00x]: ${zones.safePct}%\n")
+            sb.append("⚡ Boost Zone [2.01x - 5.00x]: ${zones.boostPct}%\n")
+            sb.append("🔥 Rocket Zone [5.01x - 20.00x]: ${zones.rocketPct}%\n")
+            sb.append("👑 Moonshot Zone [20.01x+]: ${zones.moonshotPct}%\n\n")
+        }
+
+        if (stats != null) {
+            sb.append("📊 CAPTURED ROUNDS EMPIRICAL STATS\n")
+            sb.append("Total Historical Rounds: ${stats.sampleSize}\n")
+            sb.append("Median Crash Multiplier: ${stats.medianMultiplier}x\n")
+            sb.append("Average Multiplier: ${stats.averageMultiplier}x\n")
+            sb.append("Historical Safe Zone: ${stats.safeZonePct}%\n")
+            sb.append("Historical Boost Zone: ${stats.boostZonePct}%\n")
+            sb.append("Historical Rocket Zone: ${stats.rocketZonePct}%\n")
+            sb.append("Historical Moonshot: ${stats.moonshotZonePct}%\n")
+        } else {
+            sb.append("📊 Historical rounds: Collecting live round data...\n")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("🔬 Live Probability & Zone Matrix")
+            .setMessage(sb.toString())
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Change Target") { _, _ ->
+                showTargetMultiplierPicker()
+            }
+            .show()
     }
 }

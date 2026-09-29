@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRASH ZONE PREDICTOR - The Smart Crash Game (Working Demo)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #080a18;
+            --panel-bg: rgba(16, 21, 40, 0.9);
+            --panel-border: rgba(99, 102, 241, 0.25);
+            --zone-safe: #10b981;
+            --zone-boost: #06b6d4;
+            --zone-rocket: #8b5cf6;
+            --zone-moon: #f59e0b;
+            --accent-red: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 24px;
+            background: rgba(11, 15, 30, 0.96);
+            border-bottom: 1px solid var(--panel-border);
+            backdrop-filter: blur(12px);
+            z-index: 10;
+        }
+
+        .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, #06b6d4, #8b5cf6, #f59e0b);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 25px rgba(6, 182, 212, 0.5);
+        }
+
+        .logo-title {
+            font-size: 20px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            background: linear-gradient(to right, #ffffff, #67e8f9);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge-fair {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--zone-safe);
+            border: 1px solid var(--zone-safe);
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+        }
+
+        /* History Ribbon */
+        .history-ribbon {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow-x: hidden;
+            padding: 4px 12px;
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .history-pill {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 12px;
+            white-space: nowrap;
+            background: rgba(255, 255, 255, 0.05);
+            color: #94a3b8;
+        }
+
+        .history-pill.safe { color: var(--zone-safe); background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .history-pill.boost { color: var(--zone-boost); background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); }
+        .history-pill.rocket { color: var(--zone-rocket); background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); }
+        .history-pill.moon { color: var(--zone-moon); background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
+
+        .stats-bar {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .stat-label {
+            font-size: 9px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .stat-val {
+            font-size: 14px;
+            font-weight: 800;
+            color: #38bdf8;
+        }
+
+        /* Main Workspace Grid */
+        .main-grid {
+            display: grid;
+            grid-template-rows: 1fr 240px;
+            flex: 1;
+            height: calc(100vh - 61px);
+        }
+
+        /* Top Stage (Canvas & Flight Altitude) */
+        .stage-box {
+            position: relative;
+            background: radial-gradient(circle at center, #101538 0%, #060814 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        canvas#flightCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* HUD Overlays */
+        .stage-hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 2;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px 30px;
+        }
+
+        .stage-hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .round-tag {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--panel-border);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #cbd5e1;
+            backdrop-filter: blur(8px);
+        }
+
+        .stage-hud-center {
+            text-align: center;
+        }
+
+        .multiplier-large {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 88px;
+            font-weight: 900;
+            letter-spacing: -2px;
+            background: linear-gradient(180deg, #ffffff 40%, #38bdf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 10px 40px rgba(56, 189, 248, 0.5);
+            line-height: 1;
+        }
+
+        .multiplier-large.crashed {
+            background: linear-gradient(180deg, #ffffff 40%, #ef4444 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 10px 40px rgba(239, 68, 68, 0.6);
+        }
+
+        .zone-indicator-badge {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 6px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            transition: all 0.3s;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #fff;
+        }
+
+        .zone-indicator-badge.safe { background: rgba(16, 185, 129, 0.2); border-color: var(--zone-safe); color: var(--zone-safe); box-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
+        .zone-indicator-badge.boost { background: rgba(6, 182, 212, 0.2); border-color: var(--zone-boost); color: var(--zone-boost); box-shadow: 0 0 20px rgba(6, 182, 212, 0.4); }
+        .zone-indicator-badge.rocket { background: rgba(139, 92, 246, 0.2); border-color: var(--zone-rocket); color: var(--zone-rocket); box-shadow: 0 0 20px rgba(139, 92, 246, 0.4); }
+        .zone-indicator-badge.moon { background: rgba(245, 158, 11, 0.25); border-color: var(--zone-moon); color: var(--zone-moon); box-shadow: 0 0 30px rgba(245, 158, 11, 0.6); animation: pulse-moon 1s infinite alternate; }
+
+        @keyframes pulse-moon {
+            from { transform: scale(1); }
+            to { transform: scale(1.08); }
+        }
+
+        /* Bottom Betting Deck (4 Prediction Zones) */
+        .bottom-deck {
+            background: var(--panel-bg);
+            border-top: 1px solid var(--panel-border);
+            padding: 16px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            backdrop-filter: blur(12px);
+            z-index: 5;
+        }
+
+        .deck-controls-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .bet-selector-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chip-btn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #cbd5e1;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .chip-btn.active, .chip-btn:hover {
+            background: var(--zone-boost);
+            color: #000;
+            border-color: var(--zone-boost);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+        }
+
+        .zones-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            flex: 1;
+        }
+
+        /* Individual Zone Card */
+        .zone-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .zone-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #475569;
+            transition: all 0.25s;
+        }
+
+        .zone-card:hover {
+            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .zone-card.zone-safe::before { background: var(--zone-safe); }
+        .zone-card.zone-boost::before { background: var(--zone-boost); }
+        .zone-card.zone-rocket::before { background: var(--zone-rocket); }
+        .zone-card.zone-moon::before { background: var(--zone-moon); }
+
+        .zone-card.active-bet {
+            border-color: rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .zone-card.winner {
+            animation: pulse-winner 0.8s infinite alternate;
+        }
+
+        @keyframes pulse-winner {
+            from { transform: scale(1); filter: brightness(1.2); }
+            to { transform: scale(1.03); filter: brightness(1.5); }
+        }
+
+        .zone-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .zone-name {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .zone-range {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .zone-multiplier {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .zone-safe .zone-multiplier { color: var(--zone-safe); }
+        .zone-boost .zone-multiplier { color: var(--zone-boost); }
+        .zone-rocket .zone-multiplier { color: var(--zone-rocket); }
+        .zone-moon .zone-multiplier { color: var(--zone-moon); }
+
+        .zone-bet-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-top: 10px;
+        }
+
+        .my-bet-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .my-bet-amount {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .zone-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .zone-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        /* Status Toast */
+        .toast-banner {
+            position: absolute;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 28px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 15px;
+            z-index: 20;
+            display: none;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+        }
+
+        .toast-win {
+            background: rgba(16, 185, 129, 0.95);
+            color: #000;
+            box-shadow: 0 0 35px rgba(16, 185, 129, 0.6);
+        }
+
+        .toast-loss {
+            background: rgba(239, 68, 68, 0.95);
+            color: #fff;
+            box-shadow: 0 0 35px rgba(239, 68, 68, 0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="logo-group">
+            <div class="logo-icon">🎯</div>
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="logo-title">CRASH ZONE PREDICTOR</span>
+                    <span class="badge-fair">PROVABLY FAIR</span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted);">Pick Your Crash Zone • No Latency Panic • Instant Multiplier Payouts</div>
+            </div>
+        </div>
+
+        <!-- Multipliers History Ribbon -->
+        <div class="history-ribbon" id="historyRibbon">
+            <div class="history-pill boost">3.40x</div>
+            <div class="history-pill safe">1.55x</div>
+            <div class="history-pill rocket">14.20x</div>
+            <div class="history-pill safe">1.12x</div>
+            <div class="history-pill moon">38.90x</div>
+            <div class="history-pill boost">4.80x</div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">Your Wallet</span>
+                <span class="stat-val" id="walletDisplay">$1,000.00</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Platform Margin</span>
+                <span class="stat-val" style="color: #a855f7;">4% Fixed</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="main-grid">
+        
+        <!-- Top Stage: Canvas Rocket Flight -->
+        <div class="stage-box">
+            <canvas id="flightCanvas"></canvas>
+
+            <div class="stage-hud">
+                <div class="stage-hud-top">
+                    <div class="round-tag" id="roundTag">ROUND #2041</div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Total Active Bets</div>
+                        <div style="font-family: 'JetBrains Mono'; font-weight: 700; color: #38bdf8;" id="totalPoolDisplay">$1,420.00</div>
+                    </div>
+                </div>
+
+                <div class="stage-hud-center">
+                    <div class="multiplier-large" id="multDisplay">1.00x</div>
+                    <div class="zone-indicator-badge" id="zoneBadge">WAITING FOR NEXT LAUNCH</div>
+                </div>
+
+                <div></div>
+            </div>
+
+            <div class="toast-banner" id="toastBanner"></div>
+        </div>
+
+        <!-- Bottom Deck: 4 Prediction Zones -->
+        <div class="bottom-deck">
+            <div class="deck-controls-top">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px; font-weight: 700; color: #cbd5e1; text-transform: uppercase;">Chip Size:</span>
+                    <div class="bet-selector-group">
+                        <button class="chip-btn" onclick="selectChip(5)">$5</button>
+                        <button class="chip-btn active" onclick="selectChip(10)">$10</button>
+                        <button class="chip-btn" onclick="selectChip(25)">$25</button>
+                        <button class="chip-btn" onclick="selectChip(50)">$50</button>
+                        <button class="chip-btn" onclick="selectChip(100)">$100</button>
+                    </div>
+                </div>
+
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    💡 <span style="color: #cbd5e1;">Click any zone below to place your prediction!</span>
+                </div>
+            </div>
+
+            <!-- The 4 Zones -->
+            <div class="zones-grid">
+                
+                <!-- Zone 1: Safe -->
+                <div class="zone-card zone-safe" id="cardSafe" onclick="placeBet('safe')">
+                    <div>
+                        <div class="zone-head">
+                            <span class="zone-name" style="color: var(--zone-safe);">🛡️ Safe Zone</span>
+                            <span class="zone-multiplier">1.85x</span>
+                        </div>
+                        <div class="zone-range">Crashes between 1.00x – 2.00x</div>
+                    </div>
+                    <div class="zone-bet-bar">
+                        <div>
+                            <div class="my-bet-label">Your Bet</div>
+                            <div class="my-bet-amount" id="betValSafe">$0</div>
+                        </div>
+                        <button class="zone-btn" id="btnSafe">+ PREDICT</button>
+                    </div>
+                </div>
+
+                <!-- Zone 2: Boost -->
+                <div class="zone-card zone-boost" id="cardBoost" onclick="placeBet('boost')">
+                    <div>
+                        <div class="zone-head">
+                            <span class="zone-name" style="color: var(--zone-boost);">⚡ Boost Zone</span>
+                            <span class="zone-multiplier">3.40x</span>
+                        </div>
+                        <div class="zone-range">Crashes between 2.01x – 5.00x</div>
+                    </div>
+                    <div class="zone-bet-bar">
+                        <div>
+                            <div class="my-bet-label">Your Bet</div>
+                            <div class="my-bet-amount" id="betValBoost">$0</div>
+                        </div>
+                        <button class="zone-btn" id="btnBoost">+ PREDICT</button>
+                    </div>
+                </div>
+
+                <!-- Zone 3: Rocket -->
+                <div class="zone-card zone-rocket" id="cardRocket" onclick="placeBet('rocket')">
+                    <div>
+                        <div class="zone-head">
+                            <span class="zone-name" style="color: var(--zone-rocket);">🔥 Rocket Zone</span>
+                            <span class="zone-multiplier">11.50x</span>
+                        </div>
+                        <div class="zone-range">Crashes between 5.01x – 20.00x</div>
+                    </div>
+                    <div class="zone-bet-bar">
+                        <div>
+                            <div class="my-bet-label">Your Bet</div>
+                            <div class="my-bet-amount" id="betValRocket">$0</div>
+                        </div>
+                        <button class="zone-btn" id="btnRocket">+ PREDICT</button>
+                    </div>
+                </div>
+
+                <!-- Zone 4: Moonshot -->
+                <div class="zone-card zone-moon" id="cardMoon" onclick="placeBet('moon')">
+                    <div>
+                        <div class="zone-head">
+                            <span class="zone-name" style="color: var(--zone-moon);">👑 Moonshot</span>
+                            <span class="zone-multiplier">45.00x</span>
+                        </div>
+                        <div class="zone-range">Crashes at 20.01x or higher!</div>
+                    </div>
+                    <div class="zone-bet-bar">
+                        <div>
+                            <div class="my-bet-label">Your Bet</div>
+                            <div class="my-bet-amount" id="betValMoon">$0</div>
+                        </div>
+                        <button class="zone-btn" id="btnMoon">+ PREDICT</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Web Audio Synthesizer
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playTone(freq, type, duration, vol=0.1) {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function soundBeep() { playTone(500, 'sine', 0.1, 0.08); }
+        function soundLaunch() {
+            playTone(180, 'sawtooth', 0.6, 0.15);
+            setTimeout(() => playTone(350, 'sine', 0.5, 0.2), 150);
+        }
+        function soundZoneEnter() { playTone(650, 'triangle', 0.25, 0.15); }
+        function soundCrash() { playTone(85, 'sawtooth', 0.9, 0.3); }
+        function soundWin() {
+            playTone(523, 'triangle', 0.2, 0.2);
+            setTimeout(() => playTone(659, 'triangle', 0.2, 0.2), 120);
+            setTimeout(() => playTone(783, 'triangle', 0.2, 0.25), 240);
+            setTimeout(() => playTone(1046, 'triangle', 0.5, 0.3), 360);
+        }
+
+        // Canvas Simulation
+        const canvas = document.getElementById('flightCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const stars = Array.from({ length: 160 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 2 + 0.5,
+            speed: Math.random() * 3 + 1
+        }));
+
+        let thrusterParticles = [];
+
+        // Game State Variables
+        let roundNumber = 2041;
+        let gameState = "BETTING"; // BETTING, FLYING, CRASHED
+        let bettingCountdown = 5;
+        let countdownTimer = null;
+        let walletBalance = 1000.00;
+        let selectedChip = 10;
+        
+        let currentMultiplier = 1.00;
+        let crashMultiplier = 1.00;
+        let currentZone = "safe";
+
+        // User bets per zone
+        let myBets = {
+            safe: 0,
+            boost: 0,
+            rocket: 0,
+            moon: 0
+        };
+
+        const zoneMultipliers = {
+            safe: 1.85,
+            boost: 3.40,
+            rocket: 11.50,
+            moon: 45.00
+        };
+
+        function selectChip(amount) {
+            selectedChip = amount;
+            document.querySelectorAll('.chip-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.innerText === `$${amount}`);
+            });
+        }
+
+        function placeBet(zone) {
+            if (gameState !== "BETTING") return;
+
+            if (walletBalance < selectedChip) {
+                alert("Insufficient wallet balance!");
+                return;
+            }
+
+            walletBalance -= selectedChip;
+            myBets[zone] += selectedChip;
+            soundBeep();
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('walletDisplay').innerText = `$${walletBalance.toFixed(2)}`;
+            document.getElementById('roundTag').innerText = `ROUND #${roundNumber}`;
+
+            ['safe', 'boost', 'rocket', 'moon'].forEach(z => {
+                const valEl = document.getElementById(`betVal${z.charAt(0).toUpperCase() + z.slice(1)}`);
+                const cardEl = document.getElementById(`card${z.charAt(0).toUpperCase() + z.slice(1)}`);
+                valEl.innerText = `$${myBets[z]}`;
+                cardEl.classList.toggle('active-bet', myBets[z] > 0);
+            });
+        }
+
+        function addHistoryPill(mult, zone) {
+            const ribbon = document.getElementById('historyRibbon');
+            const pill = document.createElement('div');
+            pill.className = `history-pill ${zone}`;
+            pill.innerText = `${mult.toFixed(2)}x`;
+            ribbon.insertBefore(pill, ribbon.firstChild);
+            if (ribbon.children.length > 7) ribbon.removeChild(ribbon.lastChild);
+        }
+
+        function showToast(msg, className) {
+            const toast = document.getElementById('toastBanner');
+            toast.innerText = msg;
+            toast.className = `toast-banner ${className}`;
+            toast.style.display = "block";
+        }
+
+        function hideToast() {
+            document.getElementById('toastBanner').style.display = "none";
+        }
+
+        function startBettingCountdown() {
+            gameState = "BETTING";
+            bettingCountdown = 5;
+            currentMultiplier = 1.00;
+            myBets = { safe: 0, boost: 0, rocket: 0, moon: 0 };
+            hideToast();
+
+            // Clear winner animations
+            document.querySelectorAll('.zone-card').forEach(c => c.classList.remove('winner'));
+            
+            const multDisplay = document.getElementById('multDisplay');
+            multDisplay.className = "multiplier-large";
+            multDisplay.innerText = "1.00x";
+
+            const badge = document.getElementById('zoneBadge');
+            badge.className = "zone-indicator-badge";
+            badge.innerText = `NEXT LAUNCH IN ${bettingCountdown}s`;
+
+            updateUI();
+
+            clearInterval(countdownTimer);
+            countdownTimer = setInterval(() => {
+                bettingCountdown--;
+                if (bettingCountdown > 0) {
+                    badge.innerText = `NEXT LAUNCH IN ${bettingCountdown}s`;
+                    playTone(450, 'sine', 0.1, 0.05);
+                } else {
+                    clearInterval(countdownTimer);
+                    launchFlight();
+                }
+            }, 1000);
+        }
+
+        function launchFlight() {
+            gameState = "FLYING";
+            currentMultiplier = 1.00;
+            currentZone = "safe";
+
+            // Exponential Provably Fair Distribution (3% instant crash at 1.00x)
+            const r = Math.random();
+            if (r < 0.03) {
+                crashMultiplier = 1.00;
+            } else {
+                crashMultiplier = Math.max(1.05, (0.97 / (1.0 - r)));
+                if (crashMultiplier > 2500) crashMultiplier = 2500;
+            }
+
+            soundLaunch();
+            updateZoneBadge();
+            lastTime = performance.now();
+            requestAnimationFrame(flightLoop);
+        }
+
+        function getZoneForMult(m) {
+            if (m <= 2.00) return "safe";
+            if (m <= 5.00) return "boost";
+            if (m <= 20.00) return "rocket";
+            return "moon";
+        }
+
+        function updateZoneBadge() {
+            const z = getZoneForMult(currentMultiplier);
+            const badge = document.getElementById('zoneBadge');
+            
+            if (z !== currentZone) {
+                currentZone = z;
+                soundZoneEnter();
+            }
+
+            badge.className = `zone-indicator-badge ${currentZone}`;
+            if (currentZone === "safe") badge.innerText = "🛡️ IN SAFE ZONE (1.00x - 2.00x)";
+            if (currentZone === "boost") badge.innerText = "⚡ IN BOOST ZONE (2.01x - 5.00x)";
+            if (currentZone === "rocket") badge.innerText = "🔥 IN ROCKET ZONE (5.01x - 20.00x)";
+            if (currentZone === "moon") badge.innerText = "👑 IN MOONSHOT ZONE (20.01x+)";
+        }
+
+        let lastTime = performance.now();
+
+        function flightLoop(now) {
+            const dt = (now - lastTime) / 1000;
+            lastTime = now;
+
+            if (gameState === "FLYING") {
+                currentMultiplier += (0.18 + currentMultiplier * 0.14) * dt * 2.2;
+                document.getElementById('multDisplay').innerText = currentMultiplier.toFixed(2) + "x";
+
+                updateZoneBadge();
+
+                if (currentMultiplier >= crashMultiplier) {
+                    handleCrash();
+                    return;
+                }
+            }
+
+            renderFlightCanvas();
+
+            if (gameState === "FLYING") {
+                requestAnimationFrame(flightLoop);
+            }
+        }
+
+        function handleCrash() {
+            gameState = "CRASHED";
+            currentMultiplier = crashMultiplier;
+            soundCrash();
+
+            const multDisplay = document.getElementById('multDisplay');
+            multDisplay.innerText = crashMultiplier.toFixed(2) + "x";
+            multDisplay.className = "multiplier-large crashed";
+
+            const winningZone = getZoneForMult(crashMultiplier);
+            const cardEl = document.getElementById(`card${winningZone.charAt(0).toUpperCase() + winningZone.slice(1)}`);
+            cardEl.classList.add('winner');
+
+            addHistoryPill(crashMultiplier, winningZone);
+
+            // Calculate user payout
+            const userBetOnWinner = myBets[winningZone];
+            if (userBetOnWinner > 0) {
+                const winAmount = userBetOnWinner * zoneMultipliers[winningZone];
+                walletBalance += winAmount;
+                soundWin();
+                showToast(`🎉 PREDICTION WON! +$${winAmount.toFixed(2)} (${winningZone.toUpperCase()} HIT)`, "toast-win");
+            } else {
+                const totalBet = Object.values(myBets).reduce((a, b) => a + b, 0);
+                if (totalBet > 0) {
+                    showToast(`Crashed at ${crashMultiplier.toFixed(2)}x (${winningZone.toUpperCase()}). Better luck next round!`, "toast-loss");
+                }
+            }
+
+            updateUI();
+            roundNumber++;
+
+            // Restart next round after 4.5 seconds
+            setTimeout(() => {
+                startBettingCountdown();
+            }, 4500);
+        }
+
+        function renderFlightCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Stars warp speed with multiplier
+            const speed = gameState === "FLYING" ? Math.min(currentMultiplier, 8) : 1;
+            ctx.fillStyle = "#ffffff";
+            stars.forEach(s => {
+                s.y += s.speed * speed * 0.7;
+                if (s.y > canvas.height) {
+                    s.y = 0;
+                    s.x = Math.random() * canvas.width;
+                }
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Center Rocket
+            const rx = canvas.width / 2;
+            const ry = canvas.height / 2;
+
+            if (gameState === "FLYING") {
+                for (let i = 0; i < 4; i++) {
+                    thrusterParticles.push({
+                        x: rx + (Math.random() - 0.5) * 14,
+                        y: ry + 40,
+                        vx: (Math.random() - 0.5) * 2,
+                        vy: Math.random() * 8 + 6,
+                        size: Math.random() * 8 + 4,
+                        life: 1.0
+                    });
+                }
+            }
+
+            // Draw Particles
+            for (let i = thrusterParticles.length - 1; i >= 0; i--) {
+                const p = thrusterParticles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.05;
+                if (p.life <= 0) {
+                    thrusterParticles.splice(i, 1);
+                    continue;
+                }
+                ctx.fillStyle = `rgba(${255 * p.life}, ${160 * p.life}, 255, ${p.life})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw Rocket
+            ctx.save();
+            ctx.translate(rx, ry);
+
+            if (gameState === "FLYING") {
+                ctx.translate((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2);
+            }
+
+            // Rocket Body
+            ctx.fillStyle = "#e2e8f0";
+            ctx.beginPath();
+            ctx.moveTo(0, -50);
+            ctx.lineTo(20, 20);
+            ctx.lineTo(-20, 20);
+            ctx.closePath();
+            ctx.fill();
+
+            // Dynamic Fin Color matching Current Zone
+            let finColor = "#10b981";
+            if (currentZone === "boost") finColor = "#06b6d4";
+            if (currentZone === "rocket") finColor = "#8b5cf6";
+            if (currentZone === "moon") finColor = "#f59e0b";
+
+            ctx.fillStyle = finColor;
+            ctx.beginPath();
+            ctx.moveTo(-20, 10);
+            ctx.lineTo(-35, 35);
+            ctx.lineTo(-15, 30);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(20, 10);
+            ctx.lineTo(35, 35);
+            ctx.lineTo(15, 30);
+            ctx.closePath();
+            ctx.fill();
+
+            // Cockpit Window
+            ctx.fillStyle = "#38bdf8";
+            ctx.beginPath();
+            ctx.arc(0, -15, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Initialize and start loop
+        updateUI();
+        startBettingCountdown();
+    </script>
+</body>
+</html>
