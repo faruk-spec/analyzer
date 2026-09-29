@@ -519,9 +519,18 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 ContextCompat.getColor(this, R.color.wingo_small)
             }
 
-            // Top HUD Bar Prediction Badge
-            binding.tvWingoTopPrediction.text = "🎯 BET: ${pred.recommendedSize} [${pred.confidencePct}%]"
-            binding.tvWingoTopPrediction.setTextColor(sizeColor)
+            // Top HUD Bar Prediction Badge: show prefix based on safety tier
+            val prefix = when (pred.safetyTier) {
+                "HIGH CONFIDENCE" -> "⚡ BET:"
+                "MODERATE" -> "🎯 BET:"
+                else -> "⚠️ SKIP:"
+            }
+            binding.tvWingoTopPrediction.text = "$prefix ${pred.recommendedSize} [${pred.confidencePct}%]"
+            if (pred.safetyTier == "CAUTION / SKIP") {
+                binding.tvWingoTopPrediction.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
+            } else {
+                binding.tvWingoTopPrediction.setTextColor(sizeColor)
+            }
 
             // Bottom Sheet AI Prediction Card
             val sheet = binding.bottomSheetResearch
@@ -539,11 +548,18 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             val safetyColor = when (pred.safetyTier) {
                 "HIGH CONFIDENCE" -> ContextCompat.getColor(this, R.color.accent_emerald)
                 "MODERATE" -> ContextCompat.getColor(this, R.color.accent_cyan)
-                else -> ContextCompat.getColor(this, R.color.text_muted)
+                else -> ContextCompat.getColor(this, R.color.accent_amber)
             }
             sheet.tvSheetPredSafety.setTextColor(safetyColor)
 
             sheet.tvSheetPredReason.text = pred.reasoning
+            sheet.tvSheetPredPattern.text = "Pattern: ${pred.patternName.replace("_", " ")} • ${pred.modelConsensus}"
+            if (pred.recommendedNumbers.isNotEmpty()) {
+                sheet.tvSheetPredNumbers.visibility = View.VISIBLE
+                sheet.tvSheetPredNumbers.text = "Numbers: ${pred.recommendedNumbers.joinToString(", ")}"
+            } else {
+                sheet.tvSheetPredNumbers.visibility = View.GONE
+            }
         }
 
         // WinGo History Draws Table Observer
