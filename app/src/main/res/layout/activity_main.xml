@@ -356,8 +356,7 @@
                     android:layout_height="22dp"
                     android:layout_marginEnd="10dp"
                     android:contentDescription="Pre-Crash Warning"
-                    android:src="@drawable/ic_warning"
-                    app:tint="#FFFFFF" />
+                    android:src="@drawable/ic_warning" />
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -419,7 +418,7 @@
                     android:layout_marginEnd="6dp"
                     android:contentDescription="Active"
                     android:src="@drawable/ic_activity"
-                    app:tint="@color/accent_blue" />
+                    android:tint="@color/accent_blue" />
 
                 <TextView
                     android:id="@+id/tvBubbleMultiplier"

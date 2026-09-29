@@ -83,6 +83,8 @@ jobs:
           ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee build_debug.log || {
             echo "==== GRADLE ASSEMBLE DEBUG FAILURE LOG ===="
             tail -n 80 build_debug.log
+            ERR_MSG=$(grep -E "(e: |error:|FAILURE:|\* What went wrong:)" build_debug.log | head -n 10 | tr '\n' ' | ' | tr -d '\r')
+            echo "::error title=GradleCompileError::${ERR_MSG:-Build Failed}"
             exit 1
           }
 
