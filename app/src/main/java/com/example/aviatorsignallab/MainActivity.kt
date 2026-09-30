@@ -19,7 +19,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.aviatorsignallab.databinding.ActivityMainBinding
-import com.example.aviatorsignallab.probability.ProbabilityEngine
+import android.widget.RadioButton
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
+import com.example.aviatorsignallab.ai.AiConsensusEngine
 import com.example.aviatorsignallab.ui.DiagnosticsDialog
 import com.example.aviatorsignallab.ui.ResearchViewModel
 import com.example.aviatorsignallab.ui.TrafficInspectorDialog
@@ -1417,32 +1420,88 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
     }
 
     private fun showGeminiApiKeyDialog() {
-        val currentKey = viewModel.geminiApiKey.value ?: ""
-        val input = android.widget.EditText(this).apply {
-            hint = "Paste free Gemini API key (aistudio.google.com)"
-            setText(currentKey)
-            setPadding(32, 24, 32, 24)
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
-            textSize = 12f
+        showAiConfigDialog()
+    }
+
+    private fun showAiConfigDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_ai_config, null)
+        val rbOpenAi = dialogView.findViewById<RadioButton>(R.id.rbProviderOpenAi)
+        val rbGemini = dialogView.findViewById<RadioButton>(R.id.rbProviderGemini)
+        val tilKey = dialogView.findViewById<TextInputLayout>(R.id.tilAiApiKey)
+        val etKey = dialogView.findViewById<TextInputEditText>(R.id.etAiApiKey)
+        val tvTestResult = dialogView.findViewById<TextView>(R.id.tvAiTestResult)
+        val btnTest = dialogView.findViewById<Button>(R.id.btnAiTestConnection)
+        val btnLocal = dialogView.findViewById<Button>(R.id.btnAiUseLocalMode)
+        val btnSave = dialogView.findViewById<Button>(R.id.btnAiSave)
+
+        val currentProvider = viewModel.aiProvider.value ?: AiConsensusEngine.AiProvider.OPENAI
+        if (currentProvider == AiConsensusEngine.AiProvider.OPENAI) {
+            rbOpenAi.isChecked = true
+            tilKey.hint = "OpenAI API Key (sk-...)"
+        } else {
+            rbGemini.isChecked = true
+            tilKey.hint = "Gemini API Key (aistudio.google.com)"
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("🔑 Configure Gemini AI (Free Tier)")
-            .setMessage("Paste your free Gemini API key from Google AI Studio (aistudio.google.com) to enable Dual-Engine AI Consensus. Leave empty for Local Free Math Mode.")
-            .setView(input)
-            .setPositiveButton("Save Key") { dialog, _ ->
-                val newKey = input.text.toString()
-                viewModel.saveGeminiApiKey(newKey)
-                dialog.dismiss()
+        etKey.setText(viewModel.aiApiKey.value ?: "")
+
+        rbOpenAi.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                tilKey.hint = "OpenAI API Key (sk-...)"
+                tvTestResult.visibility = View.GONE
             }
-            .setNegativeButton("Use Free Local Mode") { dialog, _ ->
-                viewModel.saveGeminiApiKey("")
-                dialog.dismiss()
+        }
+        rbGemini.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                tilKey.hint = "Gemini API Key (aistudio.google.com)"
+                tvTestResult.visibility = View.GONE
             }
-            .setNeutralButton("Cancel") { dialog, _ ->
-                dialog.dismiss()
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnTest.setOnClickListener {
+            val key = etKey.text?.toString()?.trim() ?: ""
+            if (key.isBlank()) {
+                tvTestResult.visibility = View.VISIBLE
+                tvTestResult.text = "Please enter an API Key first."
+                tvTestResult.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                return@setOnClickListener
             }
-            .show()
+            val provider = if (rbOpenAi.isChecked) AiConsensusEngine.AiProvider.OPENAI else AiConsensusEngine.AiProvider.GEMINI
+            tvTestResult.visibility = View.VISIBLE
+            tvTestResult.text = "Testing connection to ${provider.displayName}..."
+            tvTestResult.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+
+            lifecycleScope.launch(Dispatchers.IO) {
+                val (success, msg) = AiConsensusEngine.testConnection(provider, key)
+                withContext(Dispatchers.Main) {
+                    tvTestResult.text = msg
+                    if (success) {
+                        tvTestResult.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_emerald))
+                    } else {
+                        tvTestResult.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_rose))
+                    }
+                }
+            }
+        }
+
+        btnLocal.setOnClickListener {
+            viewModel.saveAiConfig(AiConsensusEngine.AiProvider.OPENAI, "")
+            dialog.dismiss()
+        }
+
+        btnSave.setOnClickListener {
+            val key = etKey.text?.toString()?.trim() ?: ""
+            val provider = if (rbOpenAi.isChecked) AiConsensusEngine.AiProvider.OPENAI else AiConsensusEngine.AiProvider.GEMINI
+            viewModel.saveAiConfig(provider, key)
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 }

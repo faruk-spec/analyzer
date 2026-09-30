@@ -61,7 +61,7 @@
     <string name="label_wingo_csv">&#x1F4E5; WINGO AI PREDICTION &amp; ROUNDS CSV</string>
     <string name="label_webhook_setup">&#x1F4E1; Setup Free Webhook Stream</string>
     <string name="label_check_updates">&#x1F504; Check for App Updates</string>
-    <string name="label_gemini_status">&#x26A1; Gemini AI: Offline (Local Math Engine Active)</string>
-    <string name="label_configure_gemini">&#x1F511; Configure Gemini AI</string>
+    <string name="label_gemini_status">&#x26A1; AI Consensus: Offline (Local Math Engine Active)</string>
+    <string name="label_configure_gemini">&#x1F511; Configure AI</string>
 
 </resources>

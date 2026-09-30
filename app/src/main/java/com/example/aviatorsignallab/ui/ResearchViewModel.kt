@@ -22,6 +22,7 @@ import com.example.aviatorsignallab.protocol.ServerReverseEngine
 import com.example.aviatorsignallab.protocol.StateChangeListener
 import com.example.aviatorsignallab.wingo.WingoProtocolEngine
 import com.example.aviatorsignallab.wingo.WingoTrendAnalyzer
+import com.example.aviatorsignallab.ai.AiConsensusEngine
 import com.example.aviatorsignallab.webview.NetworkEventListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,24 +52,41 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     val webhookSyncManager = com.example.aviatorsignallab.sync.WebhookSyncManager(application)
     val liveTickAnalyzer = LiveTickCadenceAnalyzer()
 
-    // Gemini AI Hybrid State Management
-    private val geminiPrefs by lazy { application.getSharedPreferences("gemini_ai_prefs", android.content.Context.MODE_PRIVATE) }
+    // AI Hybrid State Management (Supports OpenAI & Gemini)
+    private val aiPrefs by lazy { application.getSharedPreferences("ai_engine_prefs", android.content.Context.MODE_PRIVATE) }
 
-    private val _geminiApiKey = MutableLiveData("")
-    val geminiApiKey: LiveData<String> = _geminiApiKey
+    private val _aiProvider = MutableLiveData(AiConsensusEngine.AiProvider.OPENAI)
+    val aiProvider: LiveData<AiConsensusEngine.AiProvider> = _aiProvider
 
-    private val _geminiStatus = MutableLiveData("⚡ Gemini AI: Offline (Local Math Engine Active)")
-    val geminiStatus: LiveData<String> = _geminiStatus
+    private val _aiApiKey = MutableLiveData("")
+    val aiApiKey: LiveData<String> = _aiApiKey
+
+    private val _aiStatus = MutableLiveData("⚡ AI Consensus: Offline (Local Math Engine Active)")
+    val aiStatus: LiveData<String> = _aiStatus
+
+    // Aliases for backward compatibility
+    val geminiApiKey: LiveData<String> = _aiApiKey
+    val geminiStatus: LiveData<String> = _aiStatus
+
+    fun saveAiConfig(provider: AiConsensusEngine.AiProvider, key: String) {
+        val trimmed = key.trim()
+        aiPrefs.edit()
+            .putString("ai_provider", provider.code)
+            .putString("ai_api_key", trimmed)
+            .apply()
+
+        _aiProvider.postValue(provider)
+        _aiApiKey.postValue(trimmed)
+
+        if (trimmed.isBlank()) {
+            _aiStatus.postValue("⚡ AI Consensus: Offline (Local Math Engine Active)")
+        } else {
+            _aiStatus.postValue("⚡ ${provider.displayName}: Connected (Dual-Engine Active)")
+        }
+    }
 
     fun saveGeminiApiKey(key: String) {
-        val trimmed = key.trim()
-        geminiPrefs.edit().putString("gemini_api_key", trimmed).apply()
-        _geminiApiKey.postValue(trimmed)
-        if (trimmed.isBlank()) {
-            _geminiStatus.postValue("⚡ Gemini AI: Offline (Local Math Engine Active)")
-        } else {
-            _geminiStatus.postValue("⚡ Gemini AI: Connected (Dual-Engine Consensus Active)")
-        }
+        saveAiConfig(AiConsensusEngine.AiProvider.GEMINI, key)
     }
 
     // UI LiveData states
@@ -273,6 +291,49 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         return wingoEngine.exportDataAndAuditCsv(currentRoom)
     }
 
+    private fun requestAiConsensusAsync(
+        history: List<WingoProtocolEngine.WingoDrawResult>,
+        currentPeriod: String,
+        baselinePred: WingoTrendAnalyzer.BetPrediction
+    ) {
+        val apiKey = _aiApiKey.value ?: ""
+        if (apiKey.isBlank() || history.isEmpty()) return
+
+        val provider = _aiProvider.value ?: AiConsensusEngine.AiProvider.OPENAI
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val aiResult = AiConsensusEngine.analyzeRounds(provider, apiKey, history, currentPeriod)
+                if (aiResult != null) {
+                    val isConsensus = aiResult.recommendedSize.equals(baselinePred.recommendedSize, ignoreCase = true)
+                    val blendedConfidence = if (isConsensus) {
+                        (baselinePred.confidencePct + 8).coerceAtMost(88)
+                    } else {
+                        baselinePred.confidencePct
+                    }
+                    val blendedConsensus = if (isConsensus) {
+                        "DUAL CONSENSUS: Math + ${provider.code}"
+                    } else {
+                        "DIVERGENCE: Math [${baselinePred.recommendedSize}] vs AI [${aiResult.recommendedSize}]"
+                    }
+                    val combinedNumbers = if (aiResult.recommendedNumbers.isNotEmpty()) {
+                        (baselinePred.recommendedNumbers + aiResult.recommendedNumbers).distinct().take(3)
+                    } else {
+                        baselinePred.recommendedNumbers
+                    }
+                    val updated = baselinePred.copy(
+                        confidencePct = blendedConfidence,
+                        modelConsensus = blendedConsensus,
+                        recommendedNumbers = combinedNumbers,
+                        reasoning = "${baselinePred.reasoning} • AI: ${aiResult.reasoning}"
+                    )
+                    _wingoPrediction.postValue(updated)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ResearchViewModel", "AI Consensus failure: ${e.message}")
+            }
+        }
+    }
+
     val wingoEngine: WingoProtocolEngine = WingoProtocolEngine(object : WingoProtocolEngine.WingoListener {
         override fun onAuditUpdated(stats: WingoProtocolEngine.AuditStats, latestAudit: WingoProtocolEngine.WingoPredictionAudit?) {
             _wingoAuditStats.postValue(stats)
@@ -288,6 +349,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
                 _wingoTrendSummary.postValue(trend)
                 _wingoTransitions.postValue(trans)
                 _wingoPrediction.postValue(pred)
+                requestAiConsensusAsync(history, _wingoIssue.value?.currentPeriod ?: "--", pred)
             }
         }
 
@@ -305,6 +367,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             _wingoTrendSummary.postValue(trend)
             _wingoTransitions.postValue(trans)
             _wingoPrediction.postValue(pred)
+            requestAiConsensusAsync(results, _wingoIssue.value?.currentPeriod ?: "--", pred)
             if (results.isNotEmpty()) {
                 _latestWingoDraw.postValue(results.first())
             }
@@ -372,10 +435,13 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     var domCount = 0
 
     init {
-        val savedKey = geminiPrefs.getString("gemini_api_key", "") ?: ""
+        val savedProvCode = aiPrefs.getString("ai_provider", "OPENAI") ?: "OPENAI"
+        val savedProv = AiConsensusEngine.AiProvider.fromCode(savedProvCode)
+        val savedKey = aiPrefs.getString("ai_api_key", "") ?: ""
         if (savedKey.isNotBlank()) {
-            _geminiApiKey.value = savedKey
-            _geminiStatus.value = "⚡ Gemini AI: Connected (Dual-Engine Consensus Active)"
+            _aiProvider.value = savedProv
+            _aiApiKey.value = savedKey
+            _aiStatus.value = "⚡ ${savedProv.displayName}: Connected (Dual-Engine Active)"
         }
         loadInitialStats()
         startTicker()
