@@ -556,7 +556,6 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         sheet.btnConfigureGeminiKey.setOnClickListener {
             showGeminiApiKeyDialog()
         }
-    }
 
         // Live Prediction Accuracy Audit Observer
         viewModel.wingoAuditStats.observe(this) { stats ->
@@ -582,6 +581,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 sheet.tvSheetAuditPrimaryWinRate.text = "Size Win Rate: --%"
             }
         }
+    }
 
         // WinGo History Draws Table Observer
         viewModel.wingoHistory.observe(this) { history ->
