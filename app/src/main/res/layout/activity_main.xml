@@ -64,7 +64,7 @@
                     android:gravity="center"
                     android:paddingStart="4dp"
                     android:paddingEnd="4dp"
-                    android:text="✈️ Aviator"
+                    android:text="@string/label_mode_aviator"
                     android:textColor="@color/text_secondary"
                     android:textSize="9sp"
                     android:textStyle="bold" />
@@ -77,7 +77,7 @@
                     android:gravity="center"
                     android:paddingStart="4dp"
                     android:paddingEnd="4dp"
-                    android:text="🎯 WinGo"
+                    android:text="@string/label_mode_wingo"
                     android:textColor="#FFFFFF"
                     android:textSize="9sp"
                     android:textStyle="bold" />
@@ -101,7 +101,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif-black"
-                    android:text="🎯 BET: BIG [80%]"
+                    android:text="@string/label_top_prediction_default"
                     android:textColor="@color/wingo_big"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -377,7 +377,7 @@
                     android:paddingTop="4dp"
                     android:paddingEnd="8dp"
                     android:paddingBottom="4dp"
-                    android:text="🐉 5x BIG"
+                    android:text="@string/label_dragon_5x"
                     android:textColor="@color/wingo_dragon"
                     android:textSize="10sp"
                     android:textStyle="bold"

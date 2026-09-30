@@ -20,7 +20,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="🔍 Live Traffic &amp; Console Inspector"
+            android:text="Live Traffic &amp; Console Inspector"
             android:textColor="@color/accent_cyan"
             android:textSize="15sp"
             android:textStyle="bold" />
@@ -180,7 +180,7 @@
             android:id="@+id/btnCopyTraffic"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="📋 Copy Traffic"
+            android:text="Copy Traffic"
             android:textSize="11sp"
             android:textColor="@color/bg_primary"
             android:textStyle="bold"

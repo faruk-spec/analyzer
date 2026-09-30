@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Aviator Signal Lab</string>
     <string name="header_subtitle">Real-Time Scientific Observability &amp; Pre-Crash Analysis</string>
@@ -17,7 +18,7 @@
     <string name="sig_title">ACTIVITY SIGNAL STATUS</string>
     <string name="sig_no_signal">NO RELIABLE PRE-CRASH ACTIVITY SIGNAL DETECTED</string>
     <string name="sig_candidate">POSSIBLE ACTIVITY CANDIDATE</string>
-    <string name="sig_analyzing">GATHERING CHRONOLOGICAL ROUNDS…</string>
+    <string name="sig_analyzing">GATHERING CHRONOLOGICAL ROUNDS&#8230;</string>
 
     <string name="btn_open">Open</string>
     <string name="btn_reload">Reload</string>
@@ -31,4 +32,36 @@
     <string name="btn_clear_data">Clear Data</string>
     <string name="btn_diagnostics">Diagnostics</string>
     <string name="btn_check_update">Check Update</string>
+
+    <!-- Emoji-safe layout labels (XML unicode escapes avoid AAPT2 4-byte UTF-8 errors) -->
+    <!-- activity_main.xml labels -->
+    <string name="label_mode_aviator">&#x2708;&#xFE0F; Aviator</string>
+    <string name="label_mode_wingo">&#x1F3AF; WinGo</string>
+    <string name="label_top_prediction_default">&#x1F3AF; BET: BIG [80%]</string>
+    <string name="label_dragon_5x">&#x1F409; 5x BIG</string>
+
+    <!-- bottom_sheet_research.xml tab labels -->
+    <string name="label_tab_wingo">&#x1F3AF; WinGo Intelligence</string>
+    <string name="label_tab_aviator">&#x2708;&#xFE0F; Aviator Research</string>
+
+    <!-- bottom_sheet_research.xml section labels -->
+    <string name="label_ai_smart_bet">&#x26A1; AI SMART BET ENGINE\n&#x2022; EXPECTED VALUE</string>
+    <string name="label_free_api_key">&#x1F511; Free API Key</string>
+    <string name="label_bet_small">&#x1F3AF; BET: SMALL</string>
+    <string name="label_stake_10">&#x20B910;</string>
+    <string name="label_stake_50">&#x20B950;</string>
+    <string name="label_stake_100">&#x20B9100;</string>
+    <string name="label_stake_500">&#x20B9500;</string>
+    <string name="label_main_bet_default">&#x1F3AF; MAIN BET: 1 Unit on\nSMALL (1.9x) &#x2022; Optional Cover: 0.2 Unit on #3 (9.0x)</string>
+    <string name="label_pattern_default">Pattern: Trend Riding\n&#x2022; Positive EV</string>
+    <string name="label_live_audit">&#x1F4CA; LIVE AUDIT &amp; SIMULATED PnL</string>
+    <string name="label_export">&#x1F4E5; EXPORT</string>
+    <string name="label_bet_volume">&#x1F4CA; Bet Volume &amp; Risk</string>
+    <string name="label_sha512">&#x1F510; SHA-512 Verifier</string>
+    <string name="label_wingo_csv">&#x1F4E5; WINGO AI PREDICTION &amp; ROUNDS CSV</string>
+    <string name="label_webhook_setup">&#x1F4E1; Setup Free Webhook Stream</string>
+    <string name="label_check_updates">&#x1F504; Check for App Updates</string>
+    <string name="label_gemini_status">&#x26A1; Gemini AI: Offline (Local Math Engine Active)</string>
+    <string name="label_configure_gemini">&#x1F511; Configure Gemini AI</string>
+
 </resources>
