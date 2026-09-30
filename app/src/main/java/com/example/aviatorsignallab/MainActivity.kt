@@ -280,33 +280,31 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         viewModel.preCrashAlert.observe(this) { alert ->
             if (alert != null && alert.active) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
+                binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
+                binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
 
-                if (alert.confidence == "PREPARE") {
-                    // STAGE 1: PREPARE ADVISORY (Amber Glow)
-                    binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_prepare_alert)
-                    binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_amber))
-                    binding.tvAlertTitle.text = "⚡ PREPARE TO CASH OUT (%.2fx)".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "High Multiplier Zone • Hover Finger Over Cash Out"
-                    binding.tvBubbleStatus.text = "⚡READY"
-                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
-                    binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
-                    binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
-
-                    triggerPrepareVibration()
-                } else {
-                    // STAGE 2: FINAL CASH OUT (Crimson / Rose — Priority 1)
-                    binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
-                    binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
-                    binding.tvAlertTitle.text = "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
-                    binding.tvAlertSubtitle.text = "WebSocket Crash Intercepted • Tap Cash Out!"
-                    binding.tvBubbleStatus.text = "⚡EXIT!"
-                    binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-                    binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-                    binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-
-                    // Urgent double haptic vibration
-                    triggerImmediateVibration()
+                val titleText = when (alert.reason) {
+                    "ANIMATION_STUTTER_HITCH" -> "⚡ ANIMATION BLINK / STUTTER @ %.2fx".format(alert.multiplier)
+                    "TICK_CADENCE_FREEZE" -> "⚡ TICK CADENCE FREEZE @ %.2fx".format(alert.multiplier)
+                    "FAST_CRASH_SIGNAL" -> "⚡ CRASH INTERCEPTED @ %.2fx".format(alert.multiplier)
+                    else -> "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
                 }
+                val subText = when (alert.reason) {
+                    "ANIMATION_STUTTER_HITCH" -> "Frame render drop caught • Immediate crash imminent"
+                    "TICK_CADENCE_FREEZE" -> "Server multiplier ticks stopped • Exit flight now"
+                    "FAST_CRASH_SIGNAL" -> "Fast-Path crash packet caught before game render"
+                    else -> "Pre-crash signal detected • Tap Cash Out!"
+                }
+
+                binding.tvAlertTitle.text = titleText
+                binding.tvAlertSubtitle.text = subText
+                binding.tvBubbleStatus.text = "⚡EXIT!"
+                binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
+
+                // Urgent double haptic vibration
+                triggerImmediateVibration()
             } else {
                 binding.bannerPreCrashAlert.visibility = View.GONE
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))

@@ -545,34 +545,37 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * STAGE 1 RISK ADVISORY MONITOR: Checks if current flight has entered the high-multiplier
-     * profit/risk territory (>= 2.00x). Alerts user with Amber 'PREPARE' banner to hover their
-     * finger over Cash Out. Updates live multiplier continuously without premature exit calls.
+     * REAL-TIME TICK CADENCE FREEZE MONITOR: Fast loop (12ms) evaluating the live
+     * tick arrival intervals. If the Spribe server halts multiplier ticks (cadence freeze),
+     * fires an immediate PRE-CRASH alert during the gap, 50-180ms BEFORE the game renders "Flew Away".
      */
     private fun startRiskMonitor() {
         riskMonitorJob = viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
-                delay(25L)
+                delay(12L)
                 if (protocolEngine.currentState == GameState.LIVE) {
                     val currentMult = protocolEngine.currentMultiplier
+                    val now = System.currentTimeMillis()
 
-                    // STAGE 1: PREPARE ADVISORY (Amber) — Multiplier >= 2.00x
-                    // Tells player: High profit/danger zone reached. Get finger hovering over Cash Out!
-                    if (currentMult >= 2.00 && !prepareAlertFiredForRound.get() && !fastPathCrashFiredForRound.get()) {
-                        prepareAlertFiredForRound.set(true)
-                        _preCrashAlert.postValue(PreCrashAlertState(
-                            active = true,
-                            roundId = protocolEngine.currentRoundId,
-                            multiplier = currentMult,
-                            confidence = "PREPARE",
-                            reason = "HIGH_MULTIPLIER_ZONE"
-                        ))
-                        onDiagnosticsReceived("[STAGE_1_PREPARE] ⚡ Hover finger over Cash Out — Danger zone at ${"%.2f".format(currentMult)}x")
-                    } else if (prepareAlertFiredForRound.get() && !fastPathCrashFiredForRound.get()) {
-                        // While in Stage 1 prepare mode, keep banner multiplier tracking the live climb
-                        val currentAlert = _preCrashAlert.value
-                        if (currentAlert != null && currentAlert.active && currentAlert.confidence == "PREPARE") {
-                            _preCrashAlert.postValue(currentAlert.copy(multiplier = currentMult))
+                    if (!fastPathCrashFiredForRound.get() && currentMult >= 1.15) {
+                        val freezeResult = liveTickAnalyzer.checkForFreeze(now, currentMult)
+                        if (freezeResult.freezeDetected) {
+                            synchronized(this@ResearchViewModel) {
+                                if (fastPathLastRoundId != protocolEngine.currentRoundId || !fastPathCrashFiredForRound.get()) {
+                                    fastPathLastRoundId = protocolEngine.currentRoundId
+                                    fastPathCrashFiredForRound.set(true)
+                                    liveTickAnalyzer.markAlertFired()
+
+                                    _preCrashAlert.postValue(PreCrashAlertState(
+                                        active = true,
+                                        roundId = protocolEngine.currentRoundId,
+                                        multiplier = currentMult,
+                                        confidence = "FINAL",
+                                        reason = "TICK_CADENCE_FREEZE"
+                                    ))
+                                    onDiagnosticsReceived("[CADENCE_FREEZE] ⚡ Tick freeze intercepted (${freezeResult.currentGapMs}ms gap @ ${"%.2f".format(currentMult)}x)")
+                                }
+                            }
                         }
                     }
                 }
@@ -689,6 +692,33 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         // Fire alert IMMEDIATELY — no postValue delay, direct post
         _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, finalMult, "FINAL", "FAST_CRASH_SIGNAL"))
         onDiagnosticsReceived("[FINAL_SIGNAL] ⚡ Fast crash intercepted at ${finalMult}x via WebSocket fast-path")
+    }
+
+    /**
+     * ANIMATION STUTTER & RENDER HITCH DETECTOR:
+     * Called from JS when the requestAnimationFrame loop drops frames during flight.
+     * Fires on the exact animation "blink / stutter" phenomenon immediately preceding the crash.
+     */
+    override fun onAnimationStutter(deltaMs: Double, multiplierStr: String) {
+        val currentRound = protocolEngine.currentRoundId
+        val currentMult = protocolEngine.currentMultiplier
+
+        if (protocolEngine.currentState != GameState.LIVE) return
+
+        val mult = multiplierStr.toDoubleOrNull() ?: currentMult
+        if (mult < 1.15) return
+
+        // Dedup: single pre-crash alert per round
+        synchronized(this) {
+            if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) return
+            fastPathLastRoundId = currentRound
+            fastPathCrashFiredForRound.set(true)
+            liveTickAnalyzer.markAlertFired()
+        }
+
+        val finalMult = if (mult > 0.0) mult else currentMult
+        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, finalMult, "FINAL", "ANIMATION_STUTTER_HITCH"))
+        onDiagnosticsReceived("[ANIMATION_HITCH] ⚡ Frame blink/stutter intercepted (${deltaMs.toInt()}ms drop @ ${"%.2f".format(finalMult)}x)")
     }
 
     override fun onDiagnosticsReceived(message: String) {

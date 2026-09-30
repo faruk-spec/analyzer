@@ -31,11 +31,11 @@ class LiveTickCadenceAnalyzer {
     // Minimum multiplier before freeze detection is active (avoids early takeoff setup)
     var minMultiplierForDetection: Double = 1.15
 
-    // Adaptive threshold multiplier: 2.3x normal interval
-    var freezeThresholdMultiplier: Double = 2.3
+    // Default baseline adaptive threshold multiplier: 2.0x normal interval
+    var freezeThresholdMultiplier: Double = 2.0
 
-    // Absolute minimum silence duration in ms to avoid false alarms from mobile network jitter (300ms)
-    var absoluteMinGapMs: Long = 300L
+    // Absolute minimum silence duration in ms
+    var absoluteMinGapMs: Long = 140L
 
     // Max allowable gap: if >2500ms, round has stalled or disconnected, not pre-crash
     var absoluteMaxGapMs: Long = 2500L
@@ -44,6 +44,22 @@ class LiveTickCadenceAnalyzer {
     @Volatile
     private var alertFiredThisRound: Boolean = false
     private var currentRoundId: String = ""
+
+    /**
+     * Dynamically calculates silence threshold depending on flight speed & multiplier.
+     * At high velocity (>10x), tick starvation is lethal and causes immediate animation stutters,
+     * so threshold is tightened to ~140ms-190ms.
+     * At low velocity (<2.5x), threshold is wider (~220ms-350ms) to accommodate network jitter.
+     */
+    fun calculateAdaptiveThresholdMs(multiplier: Double): Long {
+        val avg = avgTickInterval.coerceIn(60L, 350L)
+        return when {
+            multiplier >= 15.0 -> (avg * 1.35).toLong().coerceIn(130L, 195L)
+            multiplier >= 8.0  -> (avg * 1.45).toLong().coerceIn(150L, 230L)
+            multiplier >= 2.5  -> (avg * 1.70).toLong().coerceIn(180L, 280L)
+            else               -> (avg * 2.00).toLong().coerceIn(220L, 350L)
+        }
+    }
 
     /**
      * Reset state for a new round
@@ -78,7 +94,6 @@ class LiveTickCadenceAnalyzer {
         if (tickTimestamps.size > 30) {
             tickTimestamps.removeAt(0)
         }
-        // STRICT: Do NOT reset alertFiredThisRound here. Once fired, it remains fired for the round!
     }
 
     /**
@@ -157,9 +172,7 @@ class LiveTickCadenceAnalyzer {
             )
         }
 
-        val adaptiveThreshold = (avgTickInterval * freezeThresholdMultiplier).toLong()
-            .coerceAtLeast(absoluteMinGapMs)
-
+        val adaptiveThreshold = calculateAdaptiveThresholdMs(currentMultiplier)
         val isFreeze = currentGap >= adaptiveThreshold
         val freezeRatio = if (avgTickInterval > 0) currentGap.toDouble() / avgTickInterval.toDouble() else 1.0
 
@@ -169,7 +182,7 @@ class LiveTickCadenceAnalyzer {
             avgIntervalMs = avgTickInterval,
             freezeRatio = freezeRatio,
             status = if (isFreeze) {
-                "TICK_FREEZE_DETECTED (gap=${currentGap}ms >= thr=${adaptiveThreshold}ms)"
+                "TICK_FREEZE_DETECTED (gap=${currentGap}ms >= thr=${adaptiveThreshold}ms, mult=${"%.2f".format(currentMultiplier)}x)"
             } else {
                 "CADENCE_OK (gap=${currentGap}ms, avg=${avgTickInterval}ms)"
             }
@@ -185,8 +198,8 @@ class LiveTickCadenceAnalyzer {
             val variance = tickIntervals.map { (it - avg).toDouble() * (it - avg).toDouble() }.average()
             sqrt(variance).toLong()
         } else 0L
-        val thr = (avg * freezeThresholdMultiplier).toLong().coerceAtLeast(absoluteMinGapMs)
-        return "Ticks: ${tickTimestamps.size} | Avg: ${avg}ms | Min: ${min}ms | Max: ${max}ms | Jitter: ±${jitter}ms | TriggerGap: ${thr}ms"
+        val thr10x = calculateAdaptiveThresholdMs(10.0)
+        return "Ticks: ${tickTimestamps.size} | Avg: ${avg}ms | Min: ${min}ms | Max: ${max}ms | Jitter: ±${jitter}ms | TriggerGap(10x): ${thr10x}ms"
     }
 }
 

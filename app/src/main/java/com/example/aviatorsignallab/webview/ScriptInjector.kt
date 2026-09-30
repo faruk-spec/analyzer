@@ -81,6 +81,10 @@ object ScriptInjector {
                         safeDispatch(event.data.transport, event.data.direction, event.data.payload, event.data.size);
                     } else if (event.data && event.data.__aviatorLabDiag) {
                         safeLog(event.data.msg);
+                    } else if (event.data && event.data.__aviatorLabAnimStutter) {
+                        if (window.AndroidBridge && window.AndroidBridge.onAnimationStutter) {
+                            window.AndroidBridge.onAnimationStutter(event.data.delta, event.data.mult);
+                        }
                     }
                 } catch(e) {}
             });
@@ -146,13 +150,20 @@ object ScriptInjector {
                 function processWsMessage(direction, data) {
                     try {
                         if (typeof data === 'string') {
+                            // Track live flight multiplier from incoming packets
+                            var mulMatch = data.match(/"mul"\s*:\s*"?([0-9]+\.?[0-9]*)"?/);
+                            if (mulMatch && mulMatch[1]) {
+                                var mVal = parseFloat(mulMatch[1]);
+                                if (mVal >= 1.0) window.__aviatorCurrentMult = mVal;
+                            }
+
                             // FAST-PATH: Detect crash packet via raw string matching BEFORE
                             // any JSON.stringify/parsing. This fires ~10-20ms ahead of the
                             // normal pipeline, giving the alert a head start over the game's
                             // own "Flew Away" rendering.
                             if (direction === 'INCOMING' && data.indexOf('"sta":3') !== -1 && data.indexOf('"cmd":84') !== -1) {
+                                window.__aviatorCurrentMult = 1.0;
                                 try {
-                                    var mulMatch = data.match(/"mul"\s*:\s*"?([0-9]+\.?[0-9]*)\"?/);
                                     var mulStr = mulMatch ? mulMatch[1] : '0';
                                     if (window.AndroidBridge && window.AndroidBridge.onCrashFastPath) {
                                         window.AndroidBridge.onCrashFastPath(mulStr);
@@ -233,6 +244,7 @@ object ScriptInjector {
                             var trimmed = text.trim();
                             var upper = trimmed.toUpperCase();
                             if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
+                                window.__aviatorCurrentMult = 1.0;
                                 if (lastCanvasMult !== "CRASH") {
                                     lastCanvasMult = "CRASH";
                                     safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
@@ -247,6 +259,7 @@ object ScriptInjector {
                                     var num = parseFloat(match[1]);
                                     if (num >= 1.0 && num <= 100000.0 && match[1] !== lastCanvasMult) {
                                         lastCanvasMult = match[1];
+                                        window.__aviatorCurrentMult = num;
                                         safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
                                             type: "DOM_MULTIPLIER_UPDATE",
                                             multiplier: match[1],
@@ -407,6 +420,101 @@ object ScriptInjector {
                 }
 
                 setInterval(checkWingoDom, 400);
+            } catch(e) {}
+
+            // 7. Automated Bottom Banner & Security Modal Cleaner
+            // Cleans intrusive withdrawal security notices, promotional popups, and bottom banners from casino lobby
+            try {
+                function cleanBannersAndModals() {
+                    try {
+                        if (!document.getElementById('__aviatorCleanerStyles')) {
+                            var style = document.createElement('style');
+                            style.id = '__aviatorCleanerStyles';
+                            style.textContent = '' +
+                                '.van-overlay, .van-dialog, .van-popup--center, ' +
+                                '[class*="security-warning"], [class*="withdrawal-warning"], ' +
+                                '[class*="notice-dialog"], [class*="app-download"], ' +
+                                '[class*="bottom-banner"], [class*="customer-service-floating"] {' +
+                                '    display: none !important;' +
+                                '    visibility: hidden !important;' +
+                                '    opacity: 0 !important;' +
+                                '    pointer-events: none !important;' +
+                                '}';
+                            (document.head || document.documentElement).appendChild(style);
+                        }
+
+                        // Auto-dismiss dialogs by clicking confirm / close buttons
+                        var buttons = document.querySelectorAll('.van-dialog__confirm, .van-button--primary, [role="button"], button');
+                        for (var b = 0; b < buttons.length; b++) {
+                            var btn = buttons[b];
+                            var txt = (btn.innerText || "").trim().toLowerCase();
+                            if (txt === "confirm" || txt === "i know" || txt === "close" || txt === "ok" || txt === "sure") {
+                                var parentModal = btn.closest('.van-dialog, .van-popup, [class*="warning"], [class*="notice"]');
+                                if (parentModal) {
+                                    btn.click();
+                                }
+                            }
+                        }
+
+                        // Remove container matching withdrawal warning notice
+                        var divs = document.querySelectorAll('div, section');
+                        for (var d = 0; d < divs.length; d++) {
+                            var div = divs[d];
+                            if (div.innerText && div.innerText.indexOf("WITHDRAWAL SECURITY WARNING") !== -1 && div.children.length < 8) {
+                                var container = div.closest('.van-popup, .van-dialog') || div;
+                                container.style.display = 'none';
+                            }
+                        }
+                    } catch(err) {}
+                }
+                setInterval(cleanBannersAndModals, 600);
+            } catch(e) {}
+
+            // 8. Multi-Tier Animation Stutter & Render Hitch Detector (The "Blink" / Glitch Detector)
+            // Hooks requestAnimationFrame to measure render frame deltas across all flight velocities:
+            // >15.0x : delta >= 26ms (Extreme velocity: 1-frame drop is a glaring visual jump)
+            // >8.0x  : delta >= 32ms (High velocity: Magenta tier bloom dropout)
+            // >3.0x  : delta >= 40ms (Mid flight: 2+ dropped frames)
+            // >=1.2x : delta >= 50ms (Takeoff: significant frame freeze)
+            try {
+                var lastRafTime = performance.now();
+                var lastStutterAlertTime = 0;
+
+                function frameAuditLoop(now) {
+                    var delta = now - lastRafTime;
+                    lastRafTime = now;
+
+                    var curM = window.__aviatorCurrentMult || 1.0;
+                    if (curM >= 1.20) {
+                        var stutterThreshold = 50.0;
+                        if (curM >= 15.0) {
+                            stutterThreshold = 26.0;
+                        } else if (curM >= 8.0) {
+                            stutterThreshold = 32.0;
+                        } else if (curM >= 3.0) {
+                            stutterThreshold = 40.0;
+                        }
+
+                        if (delta >= stutterThreshold && (now - lastStutterAlertTime > 2500)) {
+                            lastStutterAlertTime = now;
+                            safeLog("[ANIMATION_STUTTER] Frame drop: " + delta.toFixed(1) + "ms at " + curM.toFixed(2) + "x (thr=" + stutterThreshold + "ms)");
+
+                            if (window.AndroidBridge && window.AndroidBridge.onAnimationStutter) {
+                                window.AndroidBridge.onAnimationStutter(delta, String(curM));
+                            }
+                            if (window.top && window.top !== window) {
+                                window.top.postMessage({
+                                    __aviatorLabAnimStutter: true,
+                                    delta: delta,
+                                    mult: String(curM)
+                                }, '*');
+                            }
+                        }
+                    }
+
+                    requestAnimationFrame(frameAuditLoop);
+                }
+                requestAnimationFrame(frameAuditLoop);
             } catch(e) {}
 
         })();

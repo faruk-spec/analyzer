@@ -6,6 +6,7 @@ interface NetworkEventListener {
     fun onRawEventReceived(transport: String, direction: String, payload: String?, size: Int)
     fun onDiagnosticsReceived(message: String)
     fun onCrashFastPath(multiplierStr: String) {}
+    fun onAnimationStutter(deltaMs: Double, multiplierStr: String) {}
 }
 
 class GameProtocolBridge(
@@ -29,5 +30,14 @@ class GameProtocolBridge(
     @JavascriptInterface
     fun onCrashFastPath(multiplierStr: String) {
         listener.onCrashFastPath(multiplierStr)
+    }
+
+    /**
+     * Animation frame-drop and render hitch detector callback.
+     * Fires when the requestAnimationFrame loop stutters/skips frames during active flight.
+     */
+    @JavascriptInterface
+    fun onAnimationStutter(deltaMs: Double, multiplierStr: String) {
+        listener.onAnimationStutter(deltaMs, multiplierStr)
     }
 }
