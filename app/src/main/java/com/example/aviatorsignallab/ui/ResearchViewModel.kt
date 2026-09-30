@@ -55,7 +55,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private val _geminiApiKey = MutableLiveData("")
     val geminiApiKey: LiveData<String> = _geminiApiKey
 
-    private val _geminiStatus = MutableLiveData("🤖 Gemini AI: Offline (Local Math Engine Active)")
+    private val _geminiStatus = MutableLiveData("⚡ Gemini AI: Offline (Local Math Engine Active)")
     val geminiStatus: LiveData<String> = _geminiStatus
 
     fun saveGeminiApiKey(key: String) {
@@ -63,7 +63,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         geminiPrefs.edit().putString("gemini_api_key", trimmed).apply()
         _geminiApiKey.postValue(trimmed)
         if (trimmed.isBlank()) {
-            _geminiStatus.postValue("🤖 Gemini AI: Offline (Local Math Engine Active)")
+            _geminiStatus.postValue("⚡ Gemini AI: Offline (Local Math Engine Active)")
         } else {
             _geminiStatus.postValue("⚡ Gemini AI: Connected (Dual-Engine Consensus Active)")
         }

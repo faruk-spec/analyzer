@@ -230,7 +230,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="🤖 Gemini AI: Offline (Local Math Engine Active)"
+                            android:text="Gemini AI: Offline (Local Math Engine Active)"
                             android:textColor="@color/accent_amber"
                             android:textSize="9sp"
                             android:textStyle="bold" />
