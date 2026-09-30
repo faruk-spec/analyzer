@@ -330,6 +330,9 @@ class WingoProtocolEngine(
 
         if (periodChanged && state.history.isNotEmpty()) {
             state.prediction = WingoTrendAnalyzer.predictNextBet(state.history, period)
+            if (state.prediction.targetPeriod != "--") {
+                state.pendingPredictions[state.prediction.targetPeriod] = state.prediction
+            }
         }
 
         val issue = WingoIssueInfo(period, remainingSeconds, isLocked, room)
@@ -434,6 +437,10 @@ class WingoProtocolEngine(
         )
 
         synchronized(state.auditHistory) {
+            // Strictly enforce unique period audit (prevent duplicate entries from concurrent polling)
+            if (state.auditHistory.any { it.periodId == draw.periodId }) {
+                return
+            }
             state.auditHistory.add(0, record)
             while (state.auditHistory.size > 200) {
                 state.auditHistory.removeAt(state.auditHistory.size - 1)

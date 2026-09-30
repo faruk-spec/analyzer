@@ -669,33 +669,42 @@ object WingoTrendAnalyzer {
         var weightGreen = 0.0
         var weightRed = 0.0
 
-        // Factor 1: Color Streak Fatigue (Consecutive same color)
+        // Factor 1: Color Trend Momentum & Dragon Riding (Follow active streaks, do NOT fade early!)
         var colorStreak = 1
         for (i in total - 1 downTo 1) {
             val cCurr = if (chrono[i].color.contains("GREEN")) "GREEN" else "RED"
             val cPrev = if (chrono[i - 1].color.contains("GREEN")) "GREEN" else "RED"
             if (cCurr == cPrev) colorStreak++ else break
         }
-        if (colorStreak >= 4) {
-            // Extreme streak: heavily fade
-            if (latestColor == "RED") weightGreen += 3.8 else weightRed += 3.8
-        } else if (colorStreak == 3) {
-            if (latestColor == "RED") weightGreen += 2.6 else weightRed += 2.6
-        } else if (colorStreak == 2) {
-            // Check if 2-2 pattern exists
-            if (total >= 4) {
-                val c0 = if (chrono[total - 4].color.contains("GREEN")) "GREEN" else "RED"
-                val c1 = if (chrono[total - 3].color.contains("GREEN")) "GREEN" else "RED"
-                val c2 = if (chrono[total - 2].color.contains("GREEN")) "GREEN" else "RED"
-                val c3 = if (chrono[total - 1].color.contains("GREEN")) "GREEN" else "RED"
-                if (c0 == c1 && c2 == c3 && c0 != c2) {
-                    // 2-2 rhythm: completed 2 of c2, flip to c0!
-                    if (c0 == "GREEN") weightGreen += 3.2 else weightRed += 3.2
-                }
+
+        if (colorStreak in 2..4) {
+            // Trend Momentum: Follow active color runs!
+            val momentumBonus = if (colorStreak == 3) 3.6 else 2.8
+            if (latestColor == "GREEN") weightGreen += momentumBonus else weightRed += momentumBonus
+        } else if (colorStreak == 5) {
+            // Extended streak: still lean continuation
+            if (latestColor == "GREEN") weightGreen += 1.8 else weightRed += 1.8
+        } else if (colorStreak >= 6) {
+            // Extreme dragon exhaustion: only now consider reversal fade
+            if (latestColor == "GREEN") weightRed += 3.2 else weightGreen += 3.2
+        }
+
+        // Factor 2: 2-2 Double Pair Pattern Recognition
+        if (total >= 4) {
+            val c0 = if (chrono[total - 4].color.contains("GREEN")) "GREEN" else "RED"
+            val c1 = if (chrono[total - 3].color.contains("GREEN")) "GREEN" else "RED"
+            val c2 = if (chrono[total - 2].color.contains("GREEN")) "GREEN" else "RED"
+            val c3 = if (chrono[total - 1].color.contains("GREEN")) "GREEN" else "RED"
+            if (c0 == c1 && c2 == c3 && c0 != c2) {
+                // Completed pair: [G,G,R,R] -> flip to G | [R,R,G,G] -> flip to R
+                if (c0 == "GREEN") weightGreen += 3.2 else weightRed += 3.2
+            } else if (c1 == c2 && c2 != c3 && (total < 5 || (if (chrono[total - 5].color.contains("GREEN")) "GREEN" else "RED") != c1)) {
+                // Incomplete pair: [G, R, R] or [R, G, G] -> second of pair expected
+                if (c3 == "GREEN") weightGreen += 2.8 else weightRed += 2.8
             }
         }
 
-        // Factor 2: Alternation Chop (1-1 ping-pong)
+        // Factor 3: 1-1 Ping-Pong Alternation Chop
         var colorChop = 1
         for (i in total - 1 downTo 1) {
             val cCurr = if (chrono[i].color.contains("GREEN")) "GREEN" else "RED"
@@ -703,29 +712,17 @@ object WingoTrendAnalyzer {
             if (cCurr != cPrev) colorChop++ else break
         }
         if (colorChop >= 3) {
-            // 1-1 alternation chop continuation
-            if (latestColor == "RED") weightGreen += 3.0 else weightRed += 3.0
+            // 1-1 alternation chop continuation: flip from latest
+            if (latestColor == "RED") weightGreen += 3.2 else weightRed += 3.2
         }
 
-        // Factor 3: Rolling Window Parity Imbalance (last 20 draws)
-        val window = chrono.takeLast(20)
-        val greenCount = window.count { it.color.contains("GREEN") }
-        val redCount = window.count { it.color.contains("RED") }
-        if (greenCount >= 13) {
-            // Green over-represented -> Red mean reversion
-            weightRed += (2.2 + (greenCount - 12) * 0.4)
-        } else if (redCount >= 13) {
-            // Red over-represented -> Green mean reversion
-            weightGreen += (2.2 + (redCount - 12) * 0.4)
-        }
-
-        // Factor 4: Bayesian Prior conditioned on Predicted Size
-        // In BIG (5,6,7,8,9): 5,7,9 are GREEN (60%), 6,8 are RED (40%)
-        // In SMALL (0,1,2,3,4): 0,2,4 are RED (60%), 1,3 are GREEN (40%)
+        // Factor 4: Bayesian Prior (Soft Guidance)
+        // Big has 3 Green (5,7,9) vs 2 Red (6,8); Small has 3 Red (0,2,4) vs 2 Green (1,3).
+        // Gentle +0.4 tiebreaker weight so it doesn't fight real color runs.
         if (predictedSize == "BIG") {
-            weightGreen += 1.4
+            weightGreen += 0.4
         } else if (predictedSize == "SMALL") {
-            weightRed += 1.4
+            weightRed += 0.4
         }
 
         // Factor 5: Order-2 Markov for Color Transitions
