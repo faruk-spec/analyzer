@@ -1426,18 +1426,22 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
             textSize = 12f
         }
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("🔑 Configure Gemini AI (Free Tier)")
             .setMessage("Paste your free Gemini API key from Google AI Studio (aistudio.google.com) to enable Dual-Engine AI Consensus. Leave empty for Local Free Math Mode.")
             .setView(input)
-            .setPositiveButton("Save Key") { _, _ ->
+            .setPositiveButton("Save Key") { dialog, _ ->
                 val newKey = input.text.toString()
                 viewModel.saveGeminiApiKey(newKey)
+                dialog.dismiss()
             }
-            .setNegativeButton("Use Free Local Mode") { _, _ ->
+            .setNegativeButton("Use Free Local Mode") { dialog, _ ->
                 viewModel.saveGeminiApiKey("")
+                dialog.dismiss()
             }
-            .setNeutralButton("Cancel", null)
+            .setNeutralButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
             .show()
     }
 }

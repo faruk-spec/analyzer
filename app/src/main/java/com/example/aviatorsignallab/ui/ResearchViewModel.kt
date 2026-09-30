@@ -50,17 +50,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     val protocolEngine = ProtocolDiscoveryEngine(this)
     val webhookSyncManager = com.example.aviatorsignallab.sync.WebhookSyncManager(application)
     // Gemini AI Hybrid State Management
-    private val geminiPrefs = application.getSharedPreferences("gemini_ai_prefs", android.content.Context.MODE_PRIVATE)
+    private val geminiPrefs by lazy { application.getSharedPreferences("gemini_ai_prefs", android.content.Context.MODE_PRIVATE) }
 
-    private val _geminiApiKey = MutableLiveData(geminiPrefs.getString("gemini_api_key", "") ?: "")
+    private val _geminiApiKey = MutableLiveData("")
     val geminiApiKey: LiveData<String> = _geminiApiKey
 
-    private val _geminiStatus = MutableLiveData(
-        if (geminiPrefs.getString("gemini_api_key", "").isNullOrBlank())
-            "🤖 Gemini AI: Offline (Local Math Engine Active)"
-        else
-            "⚡ Gemini AI: Connected (Dual-Engine Consensus Active)"
-    )
+    private val _geminiStatus = MutableLiveData("🤖 Gemini AI: Offline (Local Math Engine Active)")
     val geminiStatus: LiveData<String> = _geminiStatus
 
     fun saveGeminiApiKey(key: String) {
