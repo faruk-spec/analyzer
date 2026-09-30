@@ -278,27 +278,13 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         // Real-Time Instant Pre-Crash Signal Alert (Zero-Lag BEFORE Crash)
         viewModel.preCrashAlert.observe(this) { alert ->
-            if (alert != null && alert.active) {
+            if (alert != null && alert.active && alert.multiplier >= 1.25) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
                 binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
                 binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
 
-                val titleText = when (alert.reason) {
-                    "ANIMATION_MICRO_BLINK", "ANIMATION_STUTTER_HITCH" ->
-                        "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(alert.multiplier)
-                    "TICK_CADENCE_FREEZE" ->
-                        "⚡ CADENCE FREEZE DETECTED @ %.2fx — CASH OUT NOW!".format(alert.multiplier)
-                    else ->
-                        "⚡ PRE-CRASH SIGNAL @ %.2fx — CASH OUT NOW!".format(alert.multiplier)
-                }
-                val subText = when (alert.reason) {
-                    "ANIMATION_MICRO_BLINK", "ANIMATION_STUTTER_HITCH" ->
-                        "Micro-stutter animation hitch detected BEFORE crash • Tap Cash Out!"
-                    "TICK_CADENCE_FREEZE" ->
-                        "Server multiplier cadence frozen in-flight • Exit flight now!"
-                    else ->
-                        "Pre-crash pattern detected • Tap Cash Out!"
-                }
+                val titleText = "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(alert.multiplier)
+                val subText = "Crash animation hitch detected BEFORE crash • Tap Cash Out!"
 
                 binding.tvAlertTitle.text = titleText
                 binding.tvAlertSubtitle.text = subText
@@ -307,7 +293,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
 
-                // Urgent double haptic vibration
+                // Urgent double haptic vibration ONLY when multiplier >= 1.25x in active flight
                 triggerImmediateVibration()
             } else {
                 binding.bannerPreCrashAlert.visibility = View.GONE
@@ -596,25 +582,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         }
     }
 
-    private fun triggerPrepareVibration() {
-        try {
-            val timings = longArrayOf(0L, 90L)
-            val amplitudes = intArrayOf(0, 160)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                val vibratorManager = getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator?.vibrate(90L)
-                }
-            }
-        } catch (e: Exception) {}
-    }
+
 
     private fun triggerImmediateVibration() {
         try {

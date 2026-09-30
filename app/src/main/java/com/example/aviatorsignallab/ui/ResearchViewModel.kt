@@ -552,30 +552,16 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private fun startRiskMonitor() {
         riskMonitorJob = viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
-                delay(12L)
+                delay(20L)
                 if (protocolEngine.currentState == GameState.LIVE) {
                     val currentMult = protocolEngine.currentMultiplier
                     val now = System.currentTimeMillis()
 
-                    if (!fastPathCrashFiredForRound.get() && currentMult >= 1.15) {
+                    if (currentMult >= 1.25) {
                         val freezeResult = liveTickAnalyzer.checkForFreeze(now, currentMult)
                         if (freezeResult.freezeDetected) {
-                            synchronized(this@ResearchViewModel) {
-                                if (fastPathLastRoundId != protocolEngine.currentRoundId || !fastPathCrashFiredForRound.get()) {
-                                    fastPathLastRoundId = protocolEngine.currentRoundId
-                                    fastPathCrashFiredForRound.set(true)
-                                    liveTickAnalyzer.markAlertFired()
-
-                                    _preCrashAlert.postValue(PreCrashAlertState(
-                                        active = true,
-                                        roundId = protocolEngine.currentRoundId,
-                                        multiplier = currentMult,
-                                        confidence = "FINAL",
-                                        reason = "TICK_CADENCE_FREEZE"
-                                    ))
-                                    onDiagnosticsReceived("[CADENCE_FREEZE] ⚡ Tick freeze intercepted (${freezeResult.currentGapMs}ms gap @ ${"%.2f".format(currentMult)}x)")
-                                }
-                            }
+                            // Cadence gap logged for telemetry without firing fake vibrations
+                            onDiagnosticsReceived("[CADENCE_TELEMETRY] Server cadence paused (${freezeResult.currentGapMs}ms @ ${"%.2f".format(currentMult)}x)")
                         }
                     }
                 }
@@ -683,18 +669,18 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
      * Fires on the exact animation "blink / stutter" phenomenon immediately preceding the crash.
      */
     override fun onAnimationStutter(deltaMs: Double, multiplierStr: String) {
+        // STRICT 1: Must be in active LIVE flight (never before multiplier start or during betting)
+        if (protocolEngine.currentState != GameState.LIVE) return
+
         val currentRound = protocolEngine.currentRoundId
         val currentMult = protocolEngine.currentMultiplier
 
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
         val mult = if (parsed >= 1.10) parsed else currentMult
 
-        // Verify active flight in engine: must be in-flight and above minimum threshold
-        val isLive = protocolEngine.currentState == GameState.LIVE ||
-                     (protocolEngine.currentState == GameState.ROUND_START && mult >= 1.12) ||
-                     (mult >= 1.12 && currentMult >= 1.12)
-
-        if (!isLive || mult < 1.12) return
+        // STRICT 2: Multiplier MUST have started and climbed past takeoff (>= 1.25x)
+        // Completely eliminates any vibration before multiplier start or during countdown/betting
+        if (currentMult < 1.25 || mult < 1.25) return
 
         // Dedup: single pre-crash alert per round
         synchronized(this) {
@@ -822,6 +808,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         prepareAlertFiredForRound.set(false)
         fastPathCrashFiredForRound.set(false)
         fastPathLastRoundId = roundId
+        protocolEngine.currentMultiplier = 1.00
 
         // Reset live tick cadence analyzer for new round
         liveTickAnalyzer.onNewRound(roundId)
@@ -835,8 +822,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     }
 
     override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
-        // Discard any legacy post-crash alerts
+        // Discard any legacy post-crash alerts or alerts before multiplier start
         if (reason.startsWith("FLEW_AWAY")) return
+        if (protocolEngine.currentState != GameState.LIVE || currentMultiplier < 1.25) return
 
         // STRICT: Only one alert per round across all subsystems
         if (fastPathCrashFiredForRound.get()) return

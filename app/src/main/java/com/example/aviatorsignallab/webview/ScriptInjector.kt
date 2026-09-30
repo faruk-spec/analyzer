@@ -85,8 +85,11 @@ object ScriptInjector {
                         if (window.AndroidBridge && window.AndroidBridge.onAnimationStutter) {
                             window.AndroidBridge.onAnimationStutter(event.data.delta, event.data.mult);
                         }
-                    } else if (event.data && event.data.__aviatorSyncMult) {
+                    } else if (event.data && event.data.__aviatorSyncMult !== undefined) {
                         window.__aviatorCurrentMult = event.data.__aviatorSyncMult;
+                        if (event.data.__aviatorFlightActive !== undefined) {
+                            window.__aviatorFlightActive = event.data.__aviatorFlightActive;
+                        }
                     }
                 } catch(e) {}
             });
@@ -153,27 +156,35 @@ object ScriptInjector {
                     try {
                         if (typeof data === 'string') {
                             // Track live flight multiplier from incoming packets
+                            // Track live flight multiplier & flight state from incoming packets
                             var mulMatch = data.match(/"mul"\s*:\s*"?([0-9]+\.?[0-9]*)"?/);
                             if (mulMatch && mulMatch[1]) {
                                 var mVal = parseFloat(mulMatch[1]);
                                 if (mVal >= 1.0) {
                                     window.__aviatorCurrentMult = mVal;
+                                    var isActiveFlight = mVal >= 1.08;
+                                    window.__aviatorFlightActive = isActiveFlight;
                                     try {
                                         if (window.top && window.top !== window) {
-                                            window.top.postMessage({ __aviatorSyncMult: mVal }, '*');
+                                            window.top.postMessage({ __aviatorSyncMult: mVal, __aviatorFlightActive: isActiveFlight }, '*');
                                         }
                                     } catch(e) {}
                                 }
                             }
 
-                            // Round state tracking without firing premature or post-crash alerts
-                            if (direction === 'INCOMING' && data.indexOf('"sta":3') !== -1 && data.indexOf('"cmd":84') !== -1) {
-                                window.__aviatorCurrentMult = 1.0;
-                                try {
-                                    if (window.top && window.top !== window) {
-                                        window.top.postMessage({ __aviatorSyncMult: 1.0 }, '*');
-                                    }
-                                } catch(e) {}
+                            // Command 84: 1=waiting/betting, 2=flying, 3=crashed
+                            if (direction === 'INCOMING' && data.indexOf('"cmd":84') !== -1) {
+                                if (data.indexOf('"sta":1') !== -1 || data.indexOf('"sta":3') !== -1) {
+                                    window.__aviatorCurrentMult = 0.0;
+                                    window.__aviatorFlightActive = false;
+                                    try {
+                                        if (window.top && window.top !== window) {
+                                            window.top.postMessage({ __aviatorSyncMult: 0.0, __aviatorFlightActive: false }, '*');
+                                        }
+                                    } catch(e) {}
+                                } else if (data.indexOf('"sta":2') !== -1) {
+                                    window.__aviatorFlightActive = true;
+                                }
                             }
                             safeDispatch("WEBSOCKET", direction, data, data.length);
                         } else if (data instanceof Blob) {
@@ -249,7 +260,13 @@ object ScriptInjector {
                             var trimmed = text.trim();
                             var upper = trimmed.toUpperCase();
                             if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
-                                window.__aviatorCurrentMult = 1.0;
+                                window.__aviatorCurrentMult = 0.0;
+                                window.__aviatorFlightActive = false;
+                                try {
+                                    if (window.top && window.top !== window) {
+                                        window.top.postMessage({ __aviatorSyncMult: 0.0, __aviatorFlightActive: false }, '*');
+                                    }
+                                } catch(e) {}
                                 if (lastCanvasMult !== "CRASH") {
                                     lastCanvasMult = "CRASH";
                                     safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
@@ -265,9 +282,11 @@ object ScriptInjector {
                                     if (num >= 1.0 && num <= 100000.0 && match[1] !== lastCanvasMult) {
                                         lastCanvasMult = match[1];
                                         window.__aviatorCurrentMult = num;
+                                        var isCanvasActive = num >= 1.08;
+                                        window.__aviatorFlightActive = isCanvasActive;
                                         try {
                                             if (window.top && window.top !== window) {
-                                                window.top.postMessage({ __aviatorSyncMult: num }, '*');
+                                                window.top.postMessage({ __aviatorSyncMult: num, __aviatorFlightActive: isCanvasActive }, '*');
                                             }
                                         } catch(e) {}
                                         safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
@@ -484,7 +503,15 @@ object ScriptInjector {
                         smoothedFrameDelta = smoothedFrameDelta * 0.92 + delta * 0.08;
                     }
 
-                    var curM = window.__aviatorCurrentMult || 1.0;
+                    var curM = window.__aviatorCurrentMult || 0.0;
+                    var flightActive = window.__aviatorFlightActive && curM >= 1.25;
+
+                    // STRICT: Only evaluate stutters when the plane is actively flying and multiplier has started!
+                    // Zero vibration before multiplier start, zero vibration during betting, countdown, or page load.
+                    if (!flightActive) {
+                        requestAnimationFrame(frameAuditLoop);
+                        return;
+                    }
 
                     // Adaptive spike calculation:
                     // For high multiplier (>6.0x), even a single dropped frame produces a glaring visual blink:
@@ -492,7 +519,7 @@ object ScriptInjector {
                     var minAbsolute = curM >= 6.0 ? 18.0 : 22.0;
                     var stutterThreshold = Math.max(minAbsolute, smoothedFrameDelta * spikeRatio);
 
-                    if (delta >= stutterThreshold && (now - lastStutterAlertTime > 1800)) {
+                    if (delta >= stutterThreshold && (now - lastStutterAlertTime > 2200)) {
                         lastStutterAlertTime = now;
                         safeLog("[ANIMATION_MICRO_BLINK] Frame drop: " + delta.toFixed(1) + "ms (baseline=" + smoothedFrameDelta.toFixed(1) + "ms, mult=" + curM.toFixed(2) + "x)");
 
@@ -535,9 +562,11 @@ object ScriptInjector {
                                         if (mVal >= 1.0 && mMatch[1] !== lastDomAviatorMult) {
                                             lastDomAviatorMult = mMatch[1];
                                             window.__aviatorCurrentMult = mVal;
+                                            var isDomActive = mVal >= 1.08;
+                                            window.__aviatorFlightActive = isDomActive;
                                             try {
                                                 if (window.top && window.top !== window) {
-                                                    window.top.postMessage({ __aviatorSyncMult: mVal }, '*');
+                                                    window.top.postMessage({ __aviatorSyncMult: mVal, __aviatorFlightActive: isDomActive }, '*');
                                                 }
                                             } catch(e) {}
                                             safeDispatch("DOM", "INTERNAL", JSON.stringify({
@@ -548,7 +577,13 @@ object ScriptInjector {
                                             break;
                                         }
                                     } else if (txt.toUpperCase() === "FLEW AWAY!" || txt.toUpperCase() === "FLEW AWAY" || txt.indexOf("FLEW-AWAY") !== -1 || txt.indexOf("CRASHED") !== -1) {
-                                        window.__aviatorCurrentMult = 1.0;
+                                        window.__aviatorCurrentMult = 0.0;
+                                        window.__aviatorFlightActive = false;
+                                        try {
+                                            if (window.top && window.top !== window) {
+                                                window.top.postMessage({ __aviatorSyncMult: 0.0, __aviatorFlightActive: false }, '*');
+                                            }
+                                        } catch(e) {}
                                         if (lastDomAviatorMult !== "CRASH") {
                                             lastDomAviatorMult = "CRASH";
                                             safeDispatch("DOM", "INTERNAL", JSON.stringify({
