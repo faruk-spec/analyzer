@@ -105,11 +105,11 @@ class ProtocolDiscoveryEngine(
         // 2. Discover message metadata & values
         val eventType = discoverEventType(sanitized, fieldMap, transport)
         val command = discoverCommand(fieldMap)
-        val extractedMultiplier = discoverMultiplier(sanitized, fieldMap)
+        val extractedMultiplier = discoverMultiplier(sanitized, fieldMap, transport)
         val extractedRoundId = discoverRoundId(fieldMap)
         val isCrashSignal = detectCrashSignal(sanitized, fieldMap)
 
-        if (command == "85" || extractedMultiplier != null) {
+        if (command == "85" || (extractedMultiplier != null && transport == "WEBSOCKET")) {
             lastLiveTickTimestamp = timestamp
         }
 
@@ -199,9 +199,13 @@ class ProtocolDiscoveryEngine(
                     transitionToStart(nextRoundId, timestamp)
                     currentMultiplier = newMultiplier
                     transitionToLive()
-                } else {
-                    currentMultiplier = newMultiplier
-                    listener?.onStateChanged(currentState, currentState, currentRoundId, currentMultiplier)
+                } else if (newMultiplier >= currentMultiplier) {
+                    // Strictly monotonic forward progress: prevents old/history multipliers from jumping backwards or conflicting
+                    val maxAllowedJump = if (currentMultiplier < 3.0) 2.5 else currentMultiplier * 1.5
+                    if (newMultiplier - currentMultiplier <= maxAllowedJump || currentMultiplier <= 1.01) {
+                        currentMultiplier = newMultiplier
+                        listener?.onStateChanged(currentState, currentState, currentRoundId, currentMultiplier)
+                    }
                 }
             }
             GameState.CRASH, GameState.ROUND_COMPLETE, GameState.NEXT_ROUND -> {
@@ -326,8 +330,13 @@ class ProtocolDiscoveryEngine(
         return null
     }
 
-    private fun discoverMultiplier(sanitized: String, fields: Map<String, String>): Double? {
-        // 0. Filter out false casino lobby percentage strings (e.g. RTP 97.22%) and lobby catalogs
+    private fun discoverMultiplier(sanitized: String, fields: Map<String, String>, transport: String): Double? {
+        // 0. Filter out DOM/Canvas scraping completely to prevent past history bar chips and bet buttons from corrupting live stream
+        if (transport == "DOM" || transport == "CANVAS") {
+            return null
+        }
+
+        // Filter out false casino lobby percentage strings (e.g. RTP 97.22%) and lobby catalogs
         if (sanitized.contains("RTP", ignoreCase = true) ||
             sanitized.contains("%") ||
             sanitized.contains("platformList", ignoreCase = true) ||

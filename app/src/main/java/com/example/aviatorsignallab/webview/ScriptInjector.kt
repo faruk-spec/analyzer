@@ -275,27 +275,6 @@ object ScriptInjector {
                                         rawText: trimmed
                                     }), trimmed.length);
                                 }
-                            } else {
-                                var match = strictCanvasMultRegex.exec(trimmed);
-                                if (match && match[1]) {
-                                    var num = parseFloat(match[1]);
-                                    if (num >= 1.0 && num <= 100000.0 && match[1] !== lastCanvasMult) {
-                                        lastCanvasMult = match[1];
-                                        window.__aviatorCurrentMult = num;
-                                        var isCanvasActive = num >= 1.08;
-                                        window.__aviatorFlightActive = isCanvasActive;
-                                        try {
-                                            if (window.top && window.top !== window) {
-                                                window.top.postMessage({ __aviatorSyncMult: num, __aviatorFlightActive: isCanvasActive }, '*');
-                                            }
-                                        } catch(e) {}
-                                        safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
-                                            type: "DOM_MULTIPLIER_UPDATE",
-                                            multiplier: match[1],
-                                            rawText: trimmed
-                                        }), trimmed.length);
-                                    }
-                                }
                             }
                         }
                     } catch(e) {}
@@ -542,41 +521,21 @@ object ScriptInjector {
                 requestAnimationFrame(frameAuditLoop);
             } catch(e) {}
 
-            // 9. Real-Time Aviator HTML DOM Multiplier & Crash Scanner (Ultra-Fast 100ms sync)
-            // Synchronizes multipliers when Aviator is rendered using WebGL/PixiJS and HTML DOM stage board
+            // 9. Real-Time Aviator HTML DOM Crash Scanner (Ultra-Fast 150ms sync)
+            // Monitors DOM strictly for "FLEW AWAY!" / "CRASHED" state transitions without scraping multipliers
             try {
-                var lastDomAviatorMult = "";
-                var aviatorMultRegex = /^\s*([0-9]{1,4}\.[0-9]{2})\s*[xX]\s*$/;
+                var lastDomCrashState = "";
 
                 function checkAviatorDom() {
                     try {
-                        var elements = document.querySelectorAll('.stage-board, .payout, [class*="multiplier"], [class*="coefficient"], [class*="payout"], [class*="game-display"], div, span');
+                        var elements = document.querySelectorAll('.stage-board, [class*="stage"], [class*="crash"], div, span');
                         for (var i = 0; i < elements.length; i++) {
                             var el = elements[i];
                             if (el.children.length <= 1) {
                                 var txt = (el.innerText || el.textContent || "").trim();
                                 if (txt.length > 0 && txt.length < 25) {
-                                    var mMatch = aviatorMultRegex.exec(txt);
-                                    if (mMatch && mMatch[1]) {
-                                        var mVal = parseFloat(mMatch[1]);
-                                        if (mVal >= 1.0 && mMatch[1] !== lastDomAviatorMult) {
-                                            lastDomAviatorMult = mMatch[1];
-                                            window.__aviatorCurrentMult = mVal;
-                                            var isDomActive = mVal >= 1.08;
-                                            window.__aviatorFlightActive = isDomActive;
-                                            try {
-                                                if (window.top && window.top !== window) {
-                                                    window.top.postMessage({ __aviatorSyncMult: mVal, __aviatorFlightActive: isDomActive }, '*');
-                                                }
-                                            } catch(e) {}
-                                            safeDispatch("DOM", "INTERNAL", JSON.stringify({
-                                                type: "DOM_MULTIPLIER_UPDATE",
-                                                multiplier: mMatch[1],
-                                                rawText: txt
-                                            }), txt.length);
-                                            break;
-                                        }
-                                    } else if (txt.toUpperCase() === "FLEW AWAY!" || txt.toUpperCase() === "FLEW AWAY" || txt.indexOf("FLEW-AWAY") !== -1 || txt.indexOf("CRASHED") !== -1) {
+                                    var upper = txt.toUpperCase();
+                                    if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
                                         window.__aviatorCurrentMult = 0.0;
                                         window.__aviatorFlightActive = false;
                                         try {
@@ -584,21 +543,22 @@ object ScriptInjector {
                                                 window.top.postMessage({ __aviatorSyncMult: 0.0, __aviatorFlightActive: false }, '*');
                                             }
                                         } catch(e) {}
-                                        if (lastDomAviatorMult !== "CRASH") {
-                                            lastDomAviatorMult = "CRASH";
+                                        if (lastDomCrashState !== "CRASH") {
+                                            lastDomCrashState = "CRASH";
                                             safeDispatch("DOM", "INTERNAL", JSON.stringify({
                                                 type: "DOM_CRASH_SIGNAL",
                                                 status: "crash",
                                                 rawText: txt
                                             }), txt.length);
                                         }
+                                        break;
                                     }
                                 }
                             }
                         }
                     } catch(e) {}
                 }
-                setInterval(checkAviatorDom, 120);
+                setInterval(checkAviatorDom, 150);
             } catch(e) {}
 
         })();
