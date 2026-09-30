@@ -538,10 +538,20 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             if (pred.recommendedNumbers.isNotEmpty()) {
                 sheet.tvSheetPredNumbers.visibility = View.VISIBLE
                 sheet.tvSheetPredNumbers.text = "Cover Digits: ${pred.recommendedNumbers.joinToString(", ")} (9.0x Payout)"
+        // Gemini AI Hybrid Status Observer & Config Listener
+        viewModel.geminiStatus.observe(this) { status ->
+            sheet.tvGeminiStatus.text = status
+            if (status.contains("Connected")) {
+                sheet.tvGeminiStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
             } else {
-                sheet.tvSheetPredNumbers.visibility = View.GONE
+                sheet.tvGeminiStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
             }
         }
+
+        sheet.btnConfigureGeminiKey.setOnClickListener {
+            showGeminiApiKeyDialog()
+        }
+    }
 
         // Live Prediction Accuracy Audit Observer
         viewModel.wingoAuditStats.observe(this) { stats ->
@@ -1398,5 +1408,31 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
         }
         sheet.tvSheetPredStakingNote.text = note
         sheet.tvSheetPredStakingNote.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
+    }
+
+    private fun showGeminiApiKeyDialog() {
+        val currentKey = viewModel.geminiApiKey.value ?: ""
+        val input = android.widget.EditText(this).apply {
+            hint = "Paste free Gemini API key (aistudio.google.com)"
+            setText(currentKey)
+            setPadding(32, 24, 32, 24)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            textSize = 12f
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this, R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("🔑 Configure Gemini AI (Free Tier)")
+            .setMessage("Paste your free Gemini API key from Google AI Studio (aistudio.google.com) to enable Dual-Engine AI Consensus. Leave empty for Local Free Math Mode.")
+            .setView(input)
+            .setPositiveButton("Save Key") { _, _ ->
+                val newKey = input.text.toString()
+                viewModel.saveGeminiApiKey(newKey)
+            }
+            .setNegativeButton("Use Free Local Mode") { _, _ ->
+                viewModel.saveGeminiApiKey("")
+            }
+            .setNeutralButton("Cancel", null)
+            .show()
     }
 }

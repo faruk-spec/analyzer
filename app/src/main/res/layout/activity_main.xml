@@ -46,27 +46,27 @@
                     android:text="@string/target_website_label" />
             </LinearLayout>
 
-            <!-- Mode Segmented Switch: Aviator vs WinGo -->
+            <!-- Compact Mode Segmented Switch: Aviator vs WinGo -->
             <LinearLayout
                 android:id="@+id/segmentedModeToggle"
                 android:layout_width="wrap_content"
-                android:layout_height="26dp"
-                android:layout_marginEnd="6dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="4dp"
                 android:background="@drawable/bg_toggle_unselected"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="2dp">
+                android:padding="1dp">
 
                 <TextView
                     android:id="@+id/btnModeAviator"
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:gravity="center"
-                    android:paddingStart="6dp"
-                    android:paddingEnd="6dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
                     android:text="✈️ Aviator"
                     android:textColor="@color/text_secondary"
-                    android:textSize="10sp"
+                    android:textSize="9sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -75,11 +75,11 @@
                     android:layout_height="match_parent"
                     android:background="@drawable/bg_toggle_selected"
                     android:gravity="center"
-                    android:paddingStart="6dp"
-                    android:paddingEnd="6dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
                     android:text="🎯 WinGo"
                     android:textColor="#FFFFFF"
-                    android:textSize="10sp"
+                    android:textSize="9sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -87,9 +87,9 @@
             <LinearLayout
                 android:id="@+id/layoutTopPrediction"
                 android:layout_width="0dp"
-                android:layout_height="28dp"
+                android:layout_height="30dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="6dp"
+                android:layout_marginEnd="4dp"
                 android:background="@drawable/bg_prediction_badge"
                 android:gravity="center"
                 android:orientation="horizontal"
@@ -103,23 +103,23 @@
                     android:fontFamily="sans-serif-black"
                     android:text="🎯 BET: BIG [80%]"
                     android:textColor="@color/wingo_big"
-                    android:textSize="11sp" />
+                    android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- Status Pill Badge -->
+            <!-- Ultra-Compact Status Pill Badge -->
             <TextView
                 android:id="@+id/tvConnectionStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="4dp"
                 android:background="@drawable/bg_status_badge"
-                android:paddingStart="6dp"
-                android:paddingTop="3dp"
-                android:paddingEnd="6dp"
-                android:paddingBottom="3dp"
-                android:text="@string/status_disconnected"
+                android:paddingStart="4dp"
+                android:paddingTop="2dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="2dp"
+                android:text="LIVE"
                 android:textColor="@color/text_muted"
-                android:textSize="9sp"
+                android:textSize="8sp"
                 android:textStyle="bold" />
 
             <!-- Diagnostics Action Button -->
