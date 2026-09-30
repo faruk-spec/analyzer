@@ -568,11 +568,12 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         // Live Prediction Accuracy Audit Observer
         viewModel.wingoAuditStats.observe(this) { stats ->
+            val sheet = binding.bottomSheetResearch
             if (stats.totalAudited > 0) {
                 sheet.tvSheetAuditSessionCount.text = "${stats.totalAudited} Audited"
-                sheet.tvSheetAuditSizeAccuracy.text = "${stats.sizeWinPct.roundToInt()}% (${stats.sizeWins}/${stats.totalAudited})"
-                sheet.tvSheetAuditColorAccuracy.text = "${stats.colorWinPct.roundToInt()}% (${stats.colorWins}/${stats.totalAudited})"
-                sheet.tvSheetAuditNumberAccuracy.text = "${stats.numberWinPct.roundToInt()}% (${stats.numberWins}/${stats.totalAudited})"
+                sheet.tvSheetAuditSizeAccuracy.text = "${"%.0f".format(stats.sizeWinPct)}% (${stats.sizeWins}/${stats.totalAudited})"
+                sheet.tvSheetAuditColorAccuracy.text = "${"%.0f".format(stats.colorWinPct)}% (${stats.colorWins}/${stats.totalAudited})"
+                sheet.tvSheetAuditNumberAccuracy.text = "${"%.0f".format(stats.numberWinPct)}% (${stats.numberWins}/${stats.totalAudited})"
             } else {
                 sheet.tvSheetAuditSessionCount.text = "0 Audited"
                 sheet.tvSheetAuditSizeAccuracy.text = "--%"
