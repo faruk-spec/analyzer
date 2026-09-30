@@ -23,7 +23,7 @@ class ZipExportManager(private val context: Context) {
     private val db = ResearchDatabase.getDatabase(context)
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
-    suspend fun exportAllAsZip(): File = withContext(Dispatchers.IO) {
+    suspend fun exportAllAsZip(extraFiles: List<File> = emptyList()): File = withContext(Dispatchers.IO) {
         val exportDir = File(context.getExternalFilesDir(null), "exports").apply { mkdirs() }
         val tempDir = File(exportDir, "temp_${System.currentTimeMillis()}").apply { mkdirs() }
 
@@ -48,7 +48,7 @@ class ZipExportManager(private val context: Context) {
         // Generate manifest
         val manifest = mapOf(
             "app" to "Aviator Signal Lab",
-            "version" to "1.0.3",
+            "version" to "1.4.9",
             "exportedAt" to System.currentTimeMillis(),
             "totalRounds" to rounds.size,
             "totalEvents" to events.size,
@@ -61,7 +61,8 @@ class ZipExportManager(private val context: Context) {
         // Create Zip file
         val zipFile = File(exportDir, "AviatorSignalLab_Dataset_${System.currentTimeMillis()}.zip")
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-            val filesToZip = listOf(fRounds, fEvents, fFeatures, fFields, fPatterns, fManifest)
+            val filesToZip = mutableListOf(fRounds, fEvents, fFeatures, fFields, fPatterns, fManifest)
+            filesToZip.addAll(extraFiles)
             for (file in filesToZip) {
                 if (file.exists()) {
                     zos.putNextEntry(ZipEntry(file.name))

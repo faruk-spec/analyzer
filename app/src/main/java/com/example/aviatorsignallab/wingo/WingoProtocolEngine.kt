@@ -82,7 +82,13 @@ class WingoProtocolEngine(
         val confidencePct: Int,
         val patternName: String,
         val actionType: String,
-        val timestamp: Long = System.currentTimeMillis()
+        val timestamp: Long = System.currentTimeMillis(),
+        val primaryBetType: String = "SIZE",
+        val primaryTarget: String = "",
+        val isPrimaryWin: Boolean = false,
+        val isActionable: Boolean = true,
+        val simulatedProfitUnits: Double = 0.0,
+        val expectedValue: Double = 0.0
     )
 
     data class AuditStats(
@@ -92,7 +98,13 @@ class WingoProtocolEngine(
         val colorWins: Int = 0,
         val colorWinPct: Double = 0.0,
         val numberWins: Int = 0,
-        val numberWinPct: Double = 0.0
+        val numberWinPct: Double = 0.0,
+        val primaryWins: Int = 0,
+        val primaryWinPct: Double = 0.0,
+        val activeBetsCount: Int = 0,
+        val skipsCount: Int = 0,
+        val netUnitsProfit: Double = 0.0,
+        val roiPct: Double = 0.0
     )
 
     data class RoomState(
@@ -419,6 +431,41 @@ class WingoProtocolEngine(
         val isColorWin = draw.color.uppercase().contains(pendingPred.recommendedColor.uppercase())
         val isNumberWin = pendingPred.recommendedNumbers.contains(draw.number)
 
+        val isActionable = pendingPred.isActionableBet
+        val primaryType = pendingPred.primaryBetType
+        val primaryTarget = pendingPred.primaryBetTarget
+
+        val isPrimaryWin: Boolean
+        val profitUnits: Double
+
+        if (!isActionable || primaryType == "SKIP") {
+            isPrimaryWin = false
+            profitUnits = 0.0 // Zero units wagered, capital protected
+        } else {
+            when (primaryType) {
+                "SIZE" -> {
+                    isPrimaryWin = isSizeWin
+                    profitUnits = if (isSizeWin) 0.90 else -1.00
+                }
+                "COLOR" -> {
+                    isPrimaryWin = isColorWin
+                    val isHalfWin = (draw.number == 0 && pendingPred.recommendedColor == "RED") ||
+                            (draw.number == 5 && pendingPred.recommendedColor == "GREEN")
+                    profitUnits = if (isHalfWin) 0.45 else if (isColorWin) 0.90 else -1.00
+                }
+                "NUMBER_SNIPE" -> {
+                    isPrimaryWin = isNumberWin
+                    // 1 unit on each of 3 numbers = 3 units outlay
+                    // If any 1 hits, returns 9 units -> net profit = +6.00 units
+                    profitUnits = if (isNumberWin) 6.00 else -3.00
+                }
+                else -> {
+                    isPrimaryWin = isSizeWin
+                    profitUnits = if (isSizeWin) 0.90 else -1.00
+                }
+            }
+        }
+
         val record = WingoPredictionAudit(
             periodId = draw.periodId,
             room = room,
@@ -433,7 +480,13 @@ class WingoProtocolEngine(
             isNumberWin = isNumberWin,
             confidencePct = pendingPred.confidencePct,
             patternName = pendingPred.patternName,
-            actionType = pendingPred.actionType
+            actionType = pendingPred.actionType,
+            primaryBetType = primaryType,
+            primaryTarget = primaryTarget,
+            isPrimaryWin = isPrimaryWin,
+            isActionable = isActionable,
+            simulatedProfitUnits = profitUnits,
+            expectedValue = pendingPred.expectedValue
         )
 
         synchronized(state.auditHistory) {
@@ -459,6 +512,19 @@ class WingoProtocolEngine(
             val sizeWins = state.auditHistory.count { it.isSizeWin }
             val colorWins = state.auditHistory.count { it.isColorWin }
             val numberWins = state.auditHistory.count { it.isNumberWin }
+
+            val activeAudits = state.auditHistory.filter { it.isActionable && it.primaryBetType != "SKIP" }
+            val activeCount = activeAudits.size
+            val skipsCount = total - activeCount
+            val primaryWins = activeAudits.count { it.isPrimaryWin }
+            val primaryWinPct = if (activeCount > 0) (primaryWins.toDouble() / activeCount) * 100.0 else 0.0
+
+            val netProfit = state.auditHistory.sumOf { it.simulatedProfitUnits }
+            val totalWageredUnits = activeAudits.sumOf {
+                if (it.primaryBetType == "NUMBER_SNIPE") 3.0 else 1.0
+            }
+            val roiPct = if (totalWageredUnits > 0.0) (netProfit / totalWageredUnits) * 100.0 else 0.0
+
             return AuditStats(
                 totalAudited = total,
                 sizeWins = sizeWins,
@@ -466,7 +532,13 @@ class WingoProtocolEngine(
                 colorWins = colorWins,
                 colorWinPct = (colorWins.toDouble() / total) * 100.0,
                 numberWins = numberWins,
-                numberWinPct = (numberWins.toDouble() / total) * 100.0
+                numberWinPct = (numberWins.toDouble() / total) * 100.0,
+                primaryWins = primaryWins,
+                primaryWinPct = primaryWinPct,
+                activeBetsCount = activeCount,
+                skipsCount = skipsCount,
+                netUnitsProfit = netProfit,
+                roiPct = roiPct
             )
         }
     }
@@ -484,6 +556,9 @@ class WingoProtocolEngine(
         sb.appendLine("Exported At: $exportTime")
         sb.appendLine("Room: ${room.displayName} (${room.roomCode})")
         sb.appendLine("Total Live Audited Rounds: ${stats.totalAudited}")
+        sb.appendLine("Primary Strategy Win Rate: ${"%.1f".format(stats.primaryWinPct)}% (${stats.primaryWins}/${stats.activeBetsCount} Active Bets)")
+        sb.appendLine("Disciplined Skips (Capital Protected): ${stats.skipsCount} Rounds")
+        sb.appendLine("Simulated Net Profit: ${if (stats.netUnitsProfit >= 0) "+" else ""}${"%.2f".format(stats.netUnitsProfit)} Units (ROI: ${"%.1f".format(stats.roiPct)}%)")
         sb.appendLine("Size Prediction Accuracy: ${"%.1f".format(stats.sizeWinPct)}% (${stats.sizeWins}/${stats.totalAudited} Hits)")
         sb.appendLine("Color Prediction Accuracy: ${"%.1f".format(stats.colorWinPct)}% (${stats.colorWins}/${stats.totalAudited} Hits)")
         sb.appendLine("Top-3 Numbers Accuracy: ${"%.1f".format(stats.numberWinPct)}% (${stats.numberWins}/${stats.totalAudited} Hits)")
@@ -491,15 +566,18 @@ class WingoProtocolEngine(
         sb.appendLine()
 
         sb.appendLine("SECTION 1: LIVE PREDICTION AUDIT LOG")
-        sb.appendLine("Period,Room,Pred_Size,Actual_Size,Size_Hit,Pred_Color,Actual_Color,Color_Hit,Pred_Numbers,Actual_Number,Number_Hit,Algo_Confidence,Pattern,Action_Type")
+        sb.appendLine("Period,Room,Primary_Bet,Target,Primary_Hit,Profit_Units,EV,Pred_Size,Actual_Size,Size_Hit,Pred_Color,Actual_Color,Color_Hit,Pred_Numbers,Actual_Number,Number_Hit,Algo_Confidence,Pattern,Action_Type")
 
         synchronized(state.auditHistory) {
             for (audit in state.auditHistory) {
                 val sizeResult = if (audit.isSizeWin) "WIN" else "LOSS"
                 val colorResult = if (audit.isColorWin) "WIN" else "LOSS"
                 val numResult = if (audit.isNumberWin) "WIN" else "LOSS"
+                val primaryResult = if (!audit.isActionable || audit.primaryBetType == "SKIP") "SKIPPED" else if (audit.isPrimaryWin) "WIN" else "LOSS"
                 val nums = "\"${audit.predictedNumbers.joinToString(";")}\""
-                sb.appendLine("${audit.periodId},${audit.room.roomCode},${audit.predictedSize},${audit.actualSize},$sizeResult,${audit.predictedColor},${audit.actualColor},$colorResult,$nums,${audit.actualNumber},$numResult,${audit.confidencePct}%,${audit.patternName},${audit.actionType}")
+                val profitStr = "%+.2f".format(audit.simulatedProfitUnits)
+                val evStr = "%+.2f".format(audit.expectedValue)
+                sb.appendLine("${audit.periodId},${audit.room.roomCode},${audit.primaryBetType},${audit.primaryTarget},$primaryResult,$profitStr,$evStr,${audit.predictedSize},${audit.actualSize},$sizeResult,${audit.predictedColor},${audit.actualColor},$colorResult,$nums,${audit.actualNumber},$numResult,${audit.confidencePct}%,${audit.patternName},${audit.actionType}")
             }
         }
         sb.appendLine()

@@ -840,7 +840,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun exportSingleCsv(type: String): File = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val exportDir = File(getApplication<Application>().getExternalFilesDir(null), "exports").apply { mkdirs() }
-        when (type) {
+        when (type.uppercase()) {
             "ROUNDS" -> {
                 val f = File(exportDir, "rounds_${System.currentTimeMillis()}.csv")
                 val list = db.roundDao().getAllRounds()
@@ -857,6 +857,13 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
                 val f = File(exportDir, "round_features_${System.currentTimeMillis()}.csv")
                 val list = db.featureDao().getAllFeatures()
                 com.example.aviatorsignallab.export.CsvExporter.exportFeatures(list, f)
+                f
+            }
+            "WINGO", "WINGO_AUDIT" -> {
+                val roomCode = currentRoom.roomCode
+                val f = File(exportDir, "wingo_audit_${roomCode}_${System.currentTimeMillis()}.csv")
+                val csvContent = exportWingoAuditCsv()
+                f.writeText(csvContent, Charsets.UTF_8)
                 f
             }
             else -> {
