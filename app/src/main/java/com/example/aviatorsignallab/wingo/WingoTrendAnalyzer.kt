@@ -407,16 +407,6 @@ object WingoTrendAnalyzer {
         val top3Numbers = allDigits.take(3).map { it.digit }
         val top3CombinedProb = allDigits.take(3).sumOf { it.probabilityPct }
 
-        // -------------------------------------------------------------
-        // MATHEMATICAL EXPECTED VALUE (EV) CALCULATION ACROSS MARKETS
-        // Break-even Win Rates:
-        //  - Size / Color: 1 / 1.9 = 52.63%
-        //  - Single Number: 1 / 9.0 = 11.11%
-        //  - Top-3 Numbers (1 unit each = 3 units): 3 / 9.0 = 33.33%
-        // -------------------------------------------------------------
-        val evSize = (calibratedSizeProb / 100.0) * 0.90 - (1.0 - (calibratedSizeProb / 100.0)) * 1.00
-        val evColor = (colorProbability / 100.0) * 0.90 - (1.0 - (colorProbability / 100.0)) * 1.00
-        val evTop3Numbers = ((top3CombinedProb / 100.0) * 9.0) - 3.0
 
         // -------------------------------------------------------------
         // EXPECTED VALUE (EV) CALCULATION & BETTING TARGET DIRECTIVE
