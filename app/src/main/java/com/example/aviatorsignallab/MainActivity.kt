@@ -1426,7 +1426,7 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
             textSize = 12f
         }
 
-        androidx.appcompat.app.AlertDialog.Builder(this, R.style.Theme_AppCompat_Dialog_Alert)
+        androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("🔑 Configure Gemini AI (Free Tier)")
             .setMessage("Paste your free Gemini API key from Google AI Studio (aistudio.google.com) to enable Dual-Engine AI Consensus. Leave empty for Local Free Math Mode.")
             .setView(input)
