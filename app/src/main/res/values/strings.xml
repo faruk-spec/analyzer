@@ -48,10 +48,10 @@
     <string name="label_ai_smart_bet">&#x26A1; AI SMART BET ENGINE\n&#x2022; EXPECTED VALUE</string>
     <string name="label_free_api_key">&#x1F511; Free API Key</string>
     <string name="label_bet_small">&#x1F3AF; BET: SMALL</string>
-    <string name="label_stake_10">&#x20B910;</string>
-    <string name="label_stake_50">&#x20B950;</string>
-    <string name="label_stake_100">&#x20B9100;</string>
-    <string name="label_stake_500">&#x20B9500;</string>
+    <string name="label_stake_10">&#x20B9;10</string>
+    <string name="label_stake_50">&#x20B9;50</string>
+    <string name="label_stake_100">&#x20B9;100</string>
+    <string name="label_stake_500">&#x20B9;500</string>
     <string name="label_main_bet_default">&#x1F3AF; MAIN BET: 1 Unit on\nSMALL (1.9x) &#x2022; Optional Cover: 0.2 Unit on #3 (9.0x)</string>
     <string name="label_pattern_default">Pattern: Trend Riding\n&#x2022; Positive EV</string>
     <string name="label_live_audit">&#x1F4CA; LIVE AUDIT &amp; SIMULATED PnL</string>

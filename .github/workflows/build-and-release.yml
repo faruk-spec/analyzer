@@ -86,10 +86,17 @@ jobs:
           ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee build_debug.log || {
             echo "## ❌ Build Debug APK Failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 150 build_debug.log >> $GITHUB_STEP_SUMMARY
+            grep -E "(AAPT|error:|e: |FAILURE:|What went wrong:|Caused by:)" build_debug.log | head -n 40 >> $GITHUB_STEP_SUMMARY || true
+            tail -n 60 build_debug.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "==== GRADLE ASSEMBLE DEBUG FAILURE LOG (last 150 lines) ===="
-            tail -n 150 build_debug.log
+            echo "==== GRADLE ASSEMBLE DEBUG FAILURE LOG ===="
+            tail -n 120 build_debug.log
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git checkout -B ci-debug-log
+            git add -f build_debug.log
+            git commit -m "Build debug failure log [skip ci]" || true
+            git push origin ci-debug-log -f || true
             exit 1
           }
 

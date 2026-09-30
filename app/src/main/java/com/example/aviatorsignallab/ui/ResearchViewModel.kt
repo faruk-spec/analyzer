@@ -370,6 +370,11 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     var domCount = 0
 
     init {
+        val savedKey = geminiPrefs.getString("gemini_api_key", "") ?: ""
+        if (savedKey.isNotBlank()) {
+            _geminiApiKey.value = savedKey
+            _geminiStatus.value = "⚡ Gemini AI: Connected (Dual-Engine Consensus Active)"
+        }
         loadInitialStats()
         startTicker()
         startRiskMonitor()
