@@ -49,6 +49,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     val protocolEngine = ProtocolDiscoveryEngine(this)
     val webhookSyncManager = com.example.aviatorsignallab.sync.WebhookSyncManager(application)
+    val liveTickAnalyzer = LiveTickCadenceAnalyzer()
+
     // Gemini AI Hybrid State Management
     private val geminiPrefs by lazy { application.getSharedPreferences("gemini_ai_prefs", android.content.Context.MODE_PRIVATE) }
 
