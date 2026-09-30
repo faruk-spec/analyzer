@@ -543,17 +543,19 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             }
         }
 
+
         // Gemini AI Hybrid Status Observer & Config Listener
         viewModel.geminiStatus.observe(this) { status ->
-            sheet.tvGeminiStatus.text = status
+            val geminiSheet = binding.bottomSheetResearch
+            geminiSheet.tvGeminiStatus.text = status
             if (status.contains("Connected")) {
-                sheet.tvGeminiStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
+                geminiSheet.tvGeminiStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
             } else {
-                sheet.tvGeminiStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
+                geminiSheet.tvGeminiStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
             }
         }
 
-        sheet.btnConfigureGeminiKey.setOnClickListener {
+        binding.bottomSheetResearch.btnConfigureGeminiKey.setOnClickListener {
             showGeminiApiKeyDialog()
         }
 
@@ -581,7 +583,6 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 sheet.tvSheetAuditPrimaryWinRate.text = "Size Win Rate: --%"
             }
         }
-    }
 
         // WinGo History Draws Table Observer
         viewModel.wingoHistory.observe(this) { history ->
