@@ -84,10 +84,13 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee build_debug.log || {
-            echo "==== GRADLE ASSEMBLE DEBUG FAILURE LOG ===="
-            tail -n 80 build_debug.log
-            ERR_MSG=$(grep -E "(e: |error:|FAILURE:|\* What went wrong:)" build_debug.log | head -n 10 | tr '\n' ' | ' | tr -d '\r')
-            echo "::error title=GradleCompileError::${ERR_MSG:-Build Failed}"
+            echo "==== GRADLE ASSEMBLE DEBUG FAILURE LOG (last 120 lines) ===="
+            tail -n 120 build_debug.log
+            echo "==== KOTLIN/JAVA ERRORS ===="
+            grep -E "(^e: |error:|Unresolved reference|type mismatch|overload resolution|not enough|FAILURE:|What went wrong)" build_debug.log | head -n 30
+            while IFS= read -r line; do
+              echo "::error::${line}"
+            done < <(grep -E "(^e: |Unresolved reference|type mismatch)" build_debug.log | head -n 15)
             exit 1
           }
 
