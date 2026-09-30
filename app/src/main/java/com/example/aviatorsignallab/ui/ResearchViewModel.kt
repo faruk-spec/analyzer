@@ -808,7 +808,6 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         prepareAlertFiredForRound.set(false)
         fastPathCrashFiredForRound.set(false)
         fastPathLastRoundId = roundId
-        protocolEngine.currentMultiplier = 1.00
 
         // Reset live tick cadence analyzer for new round
         liveTickAnalyzer.onNewRound(roundId)
