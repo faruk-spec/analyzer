@@ -484,14 +484,6 @@
       padding-top: 8px;
     }
 
-    /* CASINO BEAD PLATE ROADMAP */
-    .bead-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-subtle);
-      border-radius: 14px;
-      padding: 12px;
-    }
-
     .section-title {
       font-size: 11px;
       font-weight: 800;
@@ -501,102 +493,6 @@
       align-items: center;
       justify-content: space-between;
     }
-
-    .bead-scroll {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      overflow-x: auto;
-      padding-bottom: 4px;
-      scrollbar-width: none;
-    }
-    .bead-scroll::-webkit-scrollbar { display: none; }
-
-    .bead-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
-      flex-shrink: 0;
-    }
-
-    .bead-ball {
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: 800;
-      color: #FFFFFF;
-      box-shadow: 0 3px 8px rgba(0,0,0,0.4);
-    }
-
-    .bead-tag {
-      font-size: 9px;
-      font-weight: 800;
-    }
-
-    .bead-tag.big { color: var(--wingo-big); }
-    .bead-tag.small { color: var(--wingo-small); }
-
-    /* DIGIT SNIPER MATRIX (0 - 9) */
-    .digit-matrix-card {
-      background: var(--bg-card);
-      border: 1px solid rgba(245, 158, 11, 0.25);
-      border-radius: 14px;
-      padding: 12px;
-    }
-
-    .digits-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 8px;
-      margin-top: 8px;
-    }
-
-    .digit-cell {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      padding: 6px 4px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .digit-cell:hover {
-      background: rgba(59, 130, 246, 0.12);
-      border-color: var(--accent-blue);
-      transform: translateY(-2px);
-    }
-
-    .digit-cell.top-pick {
-      background: rgba(16, 185, 129, 0.12);
-      border-color: rgba(16, 185, 129, 0.45);
-      box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
-    }
-
-    .digit-prob {
-      font-size: 10px;
-      font-weight: 800;
-      color: var(--text-main);
-    }
-
-    .digit-badge {
-      font-size: 8px;
-      font-weight: 800;
-      padding: 1px 4px;
-      border-radius: 4px;
-    }
-    .badge-top { background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); }
-    .badge-due { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); }
-    .badge-hot { background: rgba(239, 68, 68, 0.2); color: var(--accent-rose); }
-    .badge-gap { color: var(--text-muted); }
 
     /* AUDIT & PnL SCOREBOARD */
     .audit-card {
@@ -932,20 +828,77 @@
 <script>
   // Initial Datasets from User's Audit Export
   const userExport30S = [
-    { period: "20260930100050814", number: 4, size: "SMALL", color: "RED" },
-    { period: "20260930100050813", number: 3, size: "SMALL", color: "GREEN" },
-    { period: "20260930100050812", number: 7, size: "BIG", color: "GREEN" },
-    { period: "20260930100050811", number: 0, size: "SMALL", color: "RED_VIOLET" },
-    { period: "20260930100050810", number: 3, size: "SMALL", color: "GREEN" },
-    { period: "20260930100050809", number: 3, size: "SMALL", color: "GREEN" },
-    { period: "20260930100050808", number: 3, size: "SMALL", color: "GREEN" },
-    { period: "20260930100050807", number: 6, size: "BIG", color: "RED" },
-    { period: "20260930100050806", number: 9, size: "BIG", color: "GREEN" },
-    { period: "20260930100050805", number: 1, size: "SMALL", color: "GREEN" },
-    { period: "20260930100050804", number: 8, size: "BIG", color: "RED" },
-    { period: "20260930100050803", number: 9, size: "BIG", color: "GREEN" },
-    { period: "20260930100050802", number: 9, size: "BIG", color: "GREEN" },
-    { period: "20260930100050801", number: 4, size: "SMALL", color: "RED" }
+    { period: "20260930100050963", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050962", number: 6, size: "BIG", color: "RED" },
+    { period: "20260930100050961", number: 0, size: "SMALL", color: "RED_VIOLET" },
+    { period: "20260930100050960", number: 1, size: "SMALL", color: "GREEN" },
+    { period: "20260930100050959", number: 6, size: "BIG", color: "RED" },
+    { period: "20260930100050958", number: 5, size: "BIG", color: "GREEN_VIOLET" },
+    { period: "20260930100050957", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050956", number: 2, size: "SMALL", color: "RED" },
+    { period: "20260930100050955", number: 5, size: "BIG", color: "GREEN_VIOLET" },
+    { period: "20260930100050954", number: 2, size: "SMALL", color: "RED" },
+    { period: "20260930100050953", number: 1, size: "SMALL", color: "GREEN" },
+    { period: "20260930100050952", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050951", number: 0, size: "SMALL", color: "RED_VIOLET" },
+    { period: "20260930100050950", number: 5, size: "BIG", color: "GREEN_VIOLET" },
+    { period: "20260930100050949", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050948", number: 3, size: "SMALL", color: "GREEN" },
+    { period: "20260930100050947", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050946", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050945", number: 6, size: "BIG", color: "RED" },
+    { period: "20260930100050944", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050943", number: 5, size: "BIG", color: "GREEN_VIOLET" },
+    { period: "20260930100050942", number: 1, size: "SMALL", color: "GREEN" },
+    { period: "20260930100050941", number: 7, size: "BIG", color: "GREEN" },
+    { period: "20260930100050940", number: 2, size: "SMALL", color: "RED" },
+    { period: "20260930100050939", number: 4, size: "SMALL", color: "RED" },
+    { period: "20260930100050938", number: 7, size: "BIG", color: "GREEN" },
+    { period: "20260930100050937", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050936", number: 4, size: "SMALL", color: "RED" },
+    { period: "20260930100050935", number: 4, size: "SMALL", color: "RED" },
+    { period: "20260930100050934", number: 3, size: "SMALL", color: "GREEN" },
+    { period: "20260930100050933", number: 2, size: "SMALL", color: "RED" },
+    { period: "20260930100050932", number: 7, size: "BIG", color: "GREEN" },
+    { period: "20260930100050931", number: 5, size: "BIG", color: "GREEN_VIOLET" },
+    { period: "20260930100050930", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050929", number: 2, size: "SMALL", color: "RED" },
+    { period: "20260930100050928", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050927", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050926", number: 1, size: "SMALL", color: "GREEN" },
+    { period: "20260930100050925", number: 4, size: "SMALL", color: "RED" },
+    { period: "20260930100050924", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050923", number: 7, size: "BIG", color: "GREEN" },
+    { period: "20260930100050922", number: 0, size: "SMALL", color: "RED_VIOLET" },
+    { period: "20260930100050921", number: 6, size: "BIG", color: "RED" },
+    { period: "20260930100050920", number: 5, size: "BIG", color: "GREEN_VIOLET" },
+    { period: "20260930100050919", number: 3, size: "SMALL", color: "GREEN" },
+    { period: "20260930100050918", number: 3, size: "SMALL", color: "GREEN" },
+    { period: "20260930100050917", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050916", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050915", number: 2, size: "SMALL", color: "RED" },
+    { period: "20260930100050914", number: 4, size: "SMALL", color: "RED" },
+    { period: "20260930100050913", number: 7, size: "BIG", color: "GREEN" },
+    { period: "20260930100050912", number: 7, size: "BIG", color: "GREEN" },
+    { period: "20260930100050911", number: 6, size: "BIG", color: "RED" },
+    { period: "20260930100050910", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050909", number: 7, size: "BIG", color: "GREEN" },
+    { period: "20260930100050908", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050907", number: 6, size: "BIG", color: "RED" },
+    { period: "20260930100050906", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050905", number: 4, size: "SMALL", color: "RED" },
+    { period: "20260930100050904", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050903", number: 0, size: "SMALL", color: "RED_VIOLET" },
+    { period: "20260930100050902", number: 6, size: "BIG", color: "RED" },
+    { period: "20260930100050901", number: 0, size: "SMALL", color: "RED_VIOLET" },
+    { period: "20260930100050900", number: 5, size: "BIG", color: "GREEN_VIOLET" },
+    { period: "20260930100050899", number: 8, size: "BIG", color: "RED" },
+    { period: "20260930100050898", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050897", number: 5, size: "BIG", color: "GREEN_VIOLET" },
+    { period: "20260930100050896", number: 9, size: "BIG", color: "GREEN" },
+    { period: "20260930100050895", number: 4, size: "SMALL", color: "RED" },
+    { period: "20260930100050894", number: 6, size: "BIG", color: "RED" },
+    { period: "20260930100050893", number: 3, size: "SMALL", color: "GREEN" }
   ];
 
   const userExport1M = [
