@@ -538,6 +538,11 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             if (pred.recommendedNumbers.isNotEmpty()) {
                 sheet.tvSheetPredNumbers.visibility = View.VISIBLE
                 sheet.tvSheetPredNumbers.text = "Cover Digits: ${pred.recommendedNumbers.joinToString(", ")} (9.0x Payout)"
+            } else {
+                sheet.tvSheetPredNumbers.visibility = View.GONE
+            }
+        }
+
         // Gemini AI Hybrid Status Observer & Config Listener
         viewModel.geminiStatus.observe(this) { status ->
             sheet.tvGeminiStatus.text = status
