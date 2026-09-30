@@ -93,10 +93,9 @@ class ProtocolDiscoveryEngine(
             val match = fastCrashMulRegex.find(rawTrimmed!!)
             val fastMul = match?.groupValues?.get(1)?.toDoubleOrNull() ?: currentMultiplier
             val finalFastMul = if (fastMul >= 1.0) fastMul else currentMultiplier
-            // Fire the crash alert BEFORE the full parsing begins
             isPreCrashAlertFiredForRound = true
             alertFiredMultiplier = finalFastMul
-            listener?.onPreCrashAlert(currentRoundId, finalFastMul, "CRITICAL", "FLEW_AWAY_SIGNAL")
+            // Note: Old post-crash FLEW_AWAY alert removed as requested.
         }
 
         // 1. Sanitize payload (full pipeline for state bookkeeping & DB storage)
@@ -128,7 +127,6 @@ class ProtocolDiscoveryEngine(
 
         if (isCrashSignal && (currentState == GameState.LIVE || currentState == GameState.ROUND_START)) {
             val finalMult = extractedMultiplier ?: currentMultiplier
-            listener?.onPreCrashAlert(currentRoundId, finalMult, "CRITICAL", "FLEW_AWAY_SIGNAL")
             transitionToCrash(timestamp, finalMult)
         } else if (extractedMultiplier != null && extractedMultiplier >= 1.0) {
             handleMultiplierUpdate(extractedMultiplier, extractedRoundId, timestamp)
@@ -272,7 +270,6 @@ class ProtocolDiscoveryEngine(
             }
         }
 
-        listener?.onPreCrashAlert(currentRoundId, finalMultiplier, "CRITICAL", "FLEW_AWAY_EXACT")
         listener?.onRoundCrashDetected(currentRoundId, finalMultiplier, timestamp)
         listener?.onStateChanged(prev, currentState, currentRoundId, currentMultiplier)
     }

@@ -172,7 +172,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             binding.tvConnectionStatus.text = status
             binding.tvBubbleStatus.text = status
 
-            if (status == "STANDBY" || viewModel.currentRoundId.value == "--") {
+            if (status == "STANDBY" && (viewModel.currentMultiplier.value ?: 1.0) <= 1.0) {
                 binding.tvMetricMultiplier.text = "--"
                 binding.tvBubbleMultiplier.text = "--"
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
@@ -212,18 +212,14 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         viewModel.currentRoundId.observe(this) { roundId ->
             binding.tvMetricCurRound.text = roundId
-            if (roundId == "--" || viewModel.connectionStatus.value == "STANDBY") {
+            if (roundId == "--" && viewModel.connectionStatus.value == "STANDBY" && (viewModel.currentMultiplier.value ?: 1.0) <= 1.0) {
                 binding.tvMetricMultiplier.text = "--"
                 binding.tvBubbleMultiplier.text = "--"
             }
         }
 
         viewModel.currentMultiplier.observe(this) { mult ->
-            if (viewModel.connectionStatus.value == "STANDBY" || viewModel.currentRoundId.value == "--") {
-                binding.tvMetricMultiplier.text = "--"
-                binding.tvBubbleMultiplier.text = "--"
-                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
-            } else {
+            if (mult > 1.0) {
                 val formatted = "%.2fx".format(mult)
                 binding.tvMetricMultiplier.text = formatted
                 binding.tvBubbleMultiplier.text = formatted
@@ -243,6 +239,10 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                         binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
                     }
                 }
+            } else if (viewModel.connectionStatus.value == "STANDBY" && mult <= 1.0) {
+                binding.tvMetricMultiplier.text = "--"
+                binding.tvBubbleMultiplier.text = "--"
+                binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
             }
         }
 
@@ -276,7 +276,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             }
         }
 
-        // Real-Time Instant Pre-Crash Signal Alert (Zero-Lag)
+        // Real-Time Instant Pre-Crash Signal Alert (Zero-Lag BEFORE Crash)
         viewModel.preCrashAlert.observe(this) { alert ->
             if (alert != null && alert.active) {
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
@@ -284,21 +284,25 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
 
                 val titleText = when (alert.reason) {
-                    "ANIMATION_STUTTER_HITCH" -> "⚡ ANIMATION BLINK / STUTTER @ %.2fx".format(alert.multiplier)
-                    "TICK_CADENCE_FREEZE" -> "⚡ TICK CADENCE FREEZE @ %.2fx".format(alert.multiplier)
-                    "FAST_CRASH_SIGNAL" -> "⚡ CRASH INTERCEPTED @ %.2fx".format(alert.multiplier)
-                    else -> "⚡ FINAL CASH OUT NOW @ %.2fx".format(alert.multiplier)
+                    "ANIMATION_MICRO_BLINK", "ANIMATION_STUTTER_HITCH" ->
+                        "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(alert.multiplier)
+                    "TICK_CADENCE_FREEZE" ->
+                        "⚡ CADENCE FREEZE DETECTED @ %.2fx — CASH OUT NOW!".format(alert.multiplier)
+                    else ->
+                        "⚡ PRE-CRASH SIGNAL @ %.2fx — CASH OUT NOW!".format(alert.multiplier)
                 }
                 val subText = when (alert.reason) {
-                    "ANIMATION_STUTTER_HITCH" -> "Frame render drop caught • Immediate crash imminent"
-                    "TICK_CADENCE_FREEZE" -> "Server multiplier ticks stopped • Exit flight now"
-                    "FAST_CRASH_SIGNAL" -> "Fast-Path crash packet caught before game render"
-                    else -> "Pre-crash signal detected • Tap Cash Out!"
+                    "ANIMATION_MICRO_BLINK", "ANIMATION_STUTTER_HITCH" ->
+                        "Micro-stutter animation hitch detected BEFORE crash • Tap Cash Out!"
+                    "TICK_CADENCE_FREEZE" ->
+                        "Server multiplier cadence frozen in-flight • Exit flight now!"
+                    else ->
+                        "Pre-crash pattern detected • Tap Cash Out!"
                 }
 
                 binding.tvAlertTitle.text = titleText
                 binding.tvAlertSubtitle.text = subText
-                binding.tvBubbleStatus.text = "⚡EXIT!"
+                binding.tvBubbleStatus.text = "⚡CASH OUT"
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))

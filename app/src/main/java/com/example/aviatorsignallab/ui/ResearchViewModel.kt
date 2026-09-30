@@ -673,25 +673,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
      * STRICT: Deduplicated with cadence freeze so only ONE final signal ever fires.
      */
     override fun onCrashFastPath(multiplierStr: String) {
-        val currentRound = protocolEngine.currentRoundId
-        val currentMult = protocolEngine.currentMultiplier
-
-        // Only fire if we're actually in a live round and haven't already fired for this round
-        if (protocolEngine.currentState != GameState.LIVE && protocolEngine.currentState != GameState.ROUND_START) return
-
-        // Dedup: exactly one fast-path alert per round
-        synchronized(this) {
-            if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) return
-            fastPathLastRoundId = currentRound
-            fastPathCrashFiredForRound.set(true)
-        }
-
-        val mult = multiplierStr.toDoubleOrNull() ?: currentMult
-        val finalMult = if (mult > 0.0) mult else currentMult
-
-        // Fire alert IMMEDIATELY — no postValue delay, direct post
-        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, finalMult, "FINAL", "FAST_CRASH_SIGNAL"))
-        onDiagnosticsReceived("[FINAL_SIGNAL] ⚡ Fast crash intercepted at ${finalMult}x via WebSocket fast-path")
+        // Log telemetry packet without firing useless at-crash alerts
+        onDiagnosticsReceived("[CRASH_TELEMETRY] Fast packet parsed at ${multiplierStr}x")
     }
 
     /**
@@ -703,10 +686,15 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val currentRound = protocolEngine.currentRoundId
         val currentMult = protocolEngine.currentMultiplier
 
-        if (protocolEngine.currentState != GameState.LIVE) return
+        val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
+        val mult = if (parsed >= 1.10) parsed else currentMult
 
-        val mult = multiplierStr.toDoubleOrNull() ?: currentMult
-        if (mult < 1.15) return
+        // Verify active flight in engine: must be in-flight and above minimum threshold
+        val isLive = protocolEngine.currentState == GameState.LIVE ||
+                     (protocolEngine.currentState == GameState.ROUND_START && mult >= 1.12) ||
+                     (mult >= 1.12 && currentMult >= 1.12)
+
+        if (!isLive || mult < 1.12) return
 
         // Dedup: single pre-crash alert per round
         synchronized(this) {
@@ -717,8 +705,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         }
 
         val finalMult = if (mult > 0.0) mult else currentMult
-        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, finalMult, "FINAL", "ANIMATION_STUTTER_HITCH"))
-        onDiagnosticsReceived("[ANIMATION_HITCH] ⚡ Frame blink/stutter intercepted (${deltaMs.toInt()}ms drop @ ${"%.2f".format(finalMult)}x)")
+        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, finalMult, "CRITICAL", "ANIMATION_MICRO_BLINK"))
+        onDiagnosticsReceived("[ANIMATION_MICRO_BLINK] ⚡ Micro-stutter caught BEFORE crash (${deltaMs.toInt()}ms drop @ ${"%.2f".format(finalMult)}x)")
     }
 
     override fun onDiagnosticsReceived(message: String) {
@@ -847,13 +835,16 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     }
 
     override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
+        // Discard any legacy post-crash alerts
+        if (reason.startsWith("FLEW_AWAY")) return
+
         // STRICT: Only one alert per round across all subsystems
         if (fastPathCrashFiredForRound.get()) return
         fastPathCrashFiredForRound.set(true)
         fastPathLastRoundId = roundId
 
-        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, "FINAL", reason))
-        onDiagnosticsReceived("[FINAL_SIGNAL] Immediate alert at ${currentMultiplier}x ($reason)")
+        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, confidence, reason))
+        onDiagnosticsReceived("[PRE_CRASH_SIGNAL] ⚡ Pre-crash signal alert at ${currentMultiplier}x ($reason)")
     }
 
     override fun onPreCrashAlertCleared() {
@@ -863,21 +854,16 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {
         _currentMultiplier.postValue(finalMultiplier)
 
-        // Only post crash alert if fast-path didn't already fire one for this round
-        if (!fastPathCrashFiredForRound.get()) {
-            fastPathCrashFiredForRound.set(true)
-            fastPathLastRoundId = roundId
-            _preCrashAlert.postValue(PreCrashAlertState(true, roundId, finalMultiplier, "FINAL", "FLEW_AWAY_EXACT"))
-        } else {
-            // Keep the final alert active and ensure final multiplier is reflected
+        // If early pre-crash alert was fired, update multiplier and fade out cleanly
+        if (fastPathCrashFiredForRound.get()) {
             val current = _preCrashAlert.value
-            if (current != null && current.active && kotlin.math.abs(current.multiplier - finalMultiplier) > 0.01) {
-                _preCrashAlert.postValue(PreCrashAlertState(true, roundId, finalMultiplier, "FINAL", "FLEW_AWAY_EXACT"))
+            if (current != null && current.active) {
+                _preCrashAlert.postValue(current.copy(multiplier = finalMultiplier))
             }
         }
 
         viewModelScope.launch {
-            delay(3500L)
+            delay(2500L)
             if (protocolEngine.currentState != GameState.LIVE) {
                 _preCrashAlert.postValue(null)
             }
