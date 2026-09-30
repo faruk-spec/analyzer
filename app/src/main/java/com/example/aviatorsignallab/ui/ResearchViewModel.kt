@@ -860,7 +860,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
                 f
             }
             "WINGO", "WINGO_AUDIT" -> {
-                val roomCode = currentRoom.roomCode
+                val room = _activeWingoRoom.value ?: WingoProtocolEngine.WingoRoom.WINGO_30S
+                val roomCode = room.roomCode
                 val f = File(exportDir, "wingo_audit_${roomCode}_${System.currentTimeMillis()}.csv")
                 val csvContent = exportWingoAuditCsv()
                 f.writeText(csvContent, Charsets.UTF_8)
