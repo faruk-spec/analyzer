@@ -138,7 +138,7 @@ object AiConsensusEngine {
         val promptBuilder = StringBuilder()
         promptBuilder.append("Analyze these recent WinGo draw results (latest first):\n")
         recentRounds.forEachIndexed { idx, draw ->
-            promptBuilder.append("Round ${idx + 1}: Period ${draw.periodId}, Number: ${draw.number}, Size: ${draw.size}, Color: ${draw.primaryColor}\n")
+            promptBuilder.append("Round ${idx + 1}: Period ${draw.periodId}, Number: ${draw.number}, Size: ${draw.size}, Color: ${draw.color}\n")
         }
         promptBuilder.append("\nTarget Period to predict: $targetPeriod\n")
         promptBuilder.append("Predict the outcome for Target Period. Output JSON only.")
