@@ -48,7 +48,7 @@ class ZipExportManager(private val context: Context) {
         // Generate manifest
         val manifest = mapOf(
             "app" to "Aviator Signal Lab",
-            "version" to "1.4.9",
+            "version" to "1.5.0",
             "exportedAt" to System.currentTimeMillis(),
             "totalRounds" to rounds.size,
             "totalEvents" to events.size,

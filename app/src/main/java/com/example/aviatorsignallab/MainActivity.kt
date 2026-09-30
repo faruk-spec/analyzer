@@ -459,50 +459,12 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         // WinGo Trend & Dragon Streak Observer
         viewModel.wingoTrendSummary.observe(this) { trend ->
-            val sheet = binding.bottomSheetResearch
             if (trend.currentStreakLength >= 3) {
                 binding.tvWingoStreakBadge.visibility = View.VISIBLE
                 binding.tvWingoStreakBadge.text = "🐉 ${trend.currentStreakLength}x ${trend.currentStreakType}"
             } else {
                 binding.tvWingoStreakBadge.visibility = View.GONE
             }
-
-            val bigPct = kotlin.math.round(trend.bigRatioPct).toInt()
-            val smallPct = kotlin.math.round(trend.smallRatioPct).toInt()
-            sheet.tvSheetBigPercent.text = "BIG $bigPct%"
-            sheet.tvSheetSmallPercent.text = "SMALL $smallPct%"
-            sheet.progressSheetBigSmall.progress = bigPct
-
-            val greenCount = trend.colorCounts["GREEN"] ?: trend.colorCounts["green"] ?: 0
-            val redCount = trend.colorCounts["RED"] ?: trend.colorCounts["red"] ?: 0
-            val violetCount = (trend.colorCounts["VIOLET"] ?: trend.colorCounts["violet"] ?: 0) +
-                (trend.colorCounts["RED_VIOLET"] ?: 0) + (trend.colorCounts["GREEN_VIOLET"] ?: 0)
-
-            sheet.tvSheetStatCounts.text = "Big: ${trend.bigCount} | Small: ${trend.smallCount} | Green: $greenCount | Red: $redCount | Violet: $violetCount"
-
-            if (trend.isDragonActive) {
-                sheet.tvSheetDragonTitle.text = "🐉 ACTIVE DRAGON: ${trend.currentStreakLength}x ${trend.currentStreakType}"
-                sheet.tvSheetDragonDetails.text = "Statistically extreme streak (${trend.currentStreakLength} consecutive rounds). Historical reversion probability is high."
-            } else {
-                sheet.tvSheetDragonTitle.text = "🐉 DRAGON STREAK RADAR"
-                sheet.tvSheetDragonDetails.text = "Current: ${trend.currentStreakLength}x ${trend.currentStreakType}. Threshold for dragon alert is 5 consecutive rounds."
-            }
-        }
-
-        // WinGo Markov Parity Transition Matrix Observer
-        viewModel.wingoTransitions.observe(this) { trans ->
-            val sheet = binding.bottomSheetResearch
-            sheet.tvSheetTransBB.text = "%.1f%%".format(trans.afterBigNextBigPct)
-            sheet.tvSheetTransBS.text = "%.1f%%".format(trans.afterBigNextSmallPct)
-            sheet.tvSheetTransSS.text = "%.1f%%".format(trans.afterSmallNextSmallPct)
-            sheet.tvSheetTransSB.text = "%.1f%%".format(trans.afterSmallNextBigPct)
-
-            val prediction = when {
-                trans.afterBigNextSmallPct > 55.0 -> "Trend: Alternating Small Expected (P: ${trans.afterBigNextSmallPct}%)"
-                trans.afterSmallNextBigPct > 55.0 -> "Trend: Alternating Big Expected (P: ${trans.afterSmallNextBigPct}%)"
-                else -> "Parity Transition: Balanced Distribution"
-            }
-            sheet.tvSheetWingoPrediction.text = prediction
         }
 
         // WinGo AI Next Bet Prediction Observer
@@ -520,26 +482,11 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
             // Top HUD Bar Prediction Badge
             if (!pred.isActionableBet || pred.primaryBetType == "SKIP") {
-                binding.tvWingoTopPrediction.text = "🛡️ SKIP ROUND [0u • NO EDGE]"
+                binding.tvWingoTopPrediction.text = "⏸️ PASS ROUND [0u]"
                 binding.tvWingoTopPrediction.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
-            } else if (pred.primaryBetType == "COLOR") {
-                binding.tvWingoTopPrediction.text = "🎨 BET: ${pred.recommendedColor} [1.9x • EV %+.2f • ${pred.kellyUnitSize}]".format(pred.expectedValue)
-                binding.tvWingoTopPrediction.setTextColor(colorRes)
-            } else if (pred.primaryBetType == "NUMBER_SNIPE") {
-                val nums = pred.recommendedNumbers.joinToString(",")
-                binding.tvWingoTopPrediction.text = "🔢 SNIPE: $nums [9.0x • EV %+.2f]".format(pred.expectedValue)
-                binding.tvWingoTopPrediction.setTextColor(ContextCompat.getColor(this, R.color.accent_purple))
             } else {
-                val actionTag = when (pred.actionType) {
-                    "DRAGON_CONTINUATION" -> "DRAGON"
-                    "TREND_REPEAT" -> "TREND"
-                    "DOUBLE_PAIR_FLIP" -> "P-FLIP"
-                    "CHOP_ALTERNATION" -> "CHOP"
-                    "MEAN_REVERSION" -> "MEAN"
-                    else -> "EV"
-                }
-                val prefix = if (pred.safetyTier.contains("HIGH")) "⚡ BET:" else "🎯 BET:"
-                binding.tvWingoTopPrediction.text = "$prefix ${pred.recommendedSize} [1.9x • EV %+.2f • $actionTag]".format(pred.expectedValue)
+                val prefix = if (pred.safetyTier.contains("STRONG")) "⚡ BET" else "🎯 BET"
+                binding.tvWingoTopPrediction.text = "$prefix ${pred.recommendedSize} (${pred.confidencePct}%)"
                 binding.tvWingoTopPrediction.setTextColor(sizeColor)
             }
 
@@ -549,31 +496,20 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             sheet.tvSheetPredLastResult.text = pred.lastResultSummary
 
             if (!pred.isActionableBet || pred.primaryBetType == "SKIP") {
-                sheet.tvSheetPredSize.text = "🛡️ CAPITAL SHIELD (SKIP ROUND)"
+                sheet.tvSheetPredSize.text = "⏸️ PASS THIS ROUND"
                 sheet.tvSheetPredSize.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
                 sheet.tvSheetPredColor.text = "COLOR: --"
                 sheet.tvSheetPredColor.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
-                sheet.tvSheetPredPayout.text = "0x (PRESERVE CAPITAL)"
+                sheet.tvSheetPredPayout.text = "0x (WAIT FOR SETUP)"
                 sheet.tvSheetPredPayout.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
-                sheet.tvSheetPredEV.text = "EV: NEGATIVE (SKIP)"
-                sheet.tvSheetPredEV.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
-                sheet.tvSheetPredSafety.text = "CAPITAL SHIELD"
+                sheet.tvSheetPredEV.text = "EDGE: NEUTRAL"
+                sheet.tvSheetPredEV.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+                sheet.tvSheetPredSafety.text = "PASS"
                 sheet.tvSheetPredSafety.setTextColor(ContextCompat.getColor(this, R.color.accent_amber))
             } else {
-                when (pred.primaryBetType) {
-                    "COLOR" -> {
-                        sheet.tvSheetPredSize.text = "🎨 PRIMARY: ${pred.recommendedColor} [RUN]"
-                        sheet.tvSheetPredSize.setTextColor(colorRes)
-                    }
-                    "NUMBER_SNIPE" -> {
-                        sheet.tvSheetPredSize.text = "🔢 PRIMARY: SNIPE [${pred.recommendedNumbers.joinToString(",")}]"
-                        sheet.tvSheetPredSize.setTextColor(ContextCompat.getColor(this, R.color.accent_purple))
-                    }
-                    else -> {
-                        sheet.tvSheetPredSize.text = "🎯 PRIMARY: ${pred.recommendedSize} [${pred.actionType.replace("_", " ")}]"
-                        sheet.tvSheetPredSize.setTextColor(sizeColor)
-                    }
-                }
+                sheet.tvSheetPredSize.text = "🎯 BET: ${pred.recommendedSize}"
+                sheet.tvSheetPredSize.setTextColor(sizeColor)
+
                 sheet.tvSheetPredColor.text = "COLOR: ${pred.recommendedColor}"
                 sheet.tvSheetPredColor.setTextColor(colorRes)
 
@@ -585,8 +521,8 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
                 sheet.tvSheetPredSafety.text = "${pred.safetyTier} • ${pred.kellyUnitSize}"
                 val safetyColor = when {
-                    pred.safetyTier.contains("HIGH") -> ContextCompat.getColor(this, R.color.accent_emerald)
-                    pred.safetyTier.contains("MODERATE") -> ContextCompat.getColor(this, R.color.accent_cyan)
+                    pred.safetyTier.contains("STRONG") -> ContextCompat.getColor(this, R.color.accent_emerald)
+                    pred.safetyTier.contains("CLEAR") -> ContextCompat.getColor(this, R.color.accent_cyan)
                     else -> ContextCompat.getColor(this, R.color.accent_amber)
                 }
                 sheet.tvSheetPredSafety.setTextColor(safetyColor)
@@ -597,17 +533,14 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
             updateStakingNote(pred, selectedBaseUnit)
 
-            sheet.tvSheetPredReason.text = "${pred.reasoning} • Sizing: ${pred.kellyUnitSize} (Entropy: ${"%.2f".format(pred.shannonEntropy)})"
-            sheet.tvSheetPredPattern.text = "Pattern: ${pred.patternName.replace("_", " ")} • ${pred.modelConsensus}"
+            sheet.tvSheetPredReason.text = "${pred.reasoning} • Sizing: ${pred.kellyUnitSize}"
+            sheet.tvSheetPredPattern.text = "Signal: ${pred.patternName.replace("_", " ")} • ${pred.modelConsensus}"
             if (pred.recommendedNumbers.isNotEmpty()) {
                 sheet.tvSheetPredNumbers.visibility = View.VISIBLE
-                sheet.tvSheetPredNumbers.text = "Sniper Digits: ${pred.recommendedNumbers.joinToString(", ")} (900% Reward)"
+                sheet.tvSheetPredNumbers.text = "Cover Digits: ${pred.recommendedNumbers.joinToString(", ")} (9.0x Payout)"
             } else {
                 sheet.tvSheetPredNumbers.visibility = View.GONE
             }
-
-            // Render Digit Sniper Matrix
-            renderDigitSniperMatrix(pred.allDigitMetrics)
         }
 
         // Live Prediction Accuracy Audit Observer
@@ -624,21 +557,20 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 val profitColor = if (stats.netUnitsProfit >= 0) R.color.accent_emerald else R.color.accent_rose
                 sheet.tvSheetAuditNetProfit.setTextColor(ContextCompat.getColor(this, profitColor))
 
-                sheet.tvSheetAuditPrimaryWinRate.text = "Primary Edge: ${"%.0f".format(stats.primaryWinPct)}% (${stats.primaryWins}/${stats.activeBetsCount}) • ${stats.skipsCount} Skips"
+                sheet.tvSheetAuditPrimaryWinRate.text = "Size Win Rate: ${"%.0f".format(stats.sizeWinPct)}% (${stats.sizeWins}/${stats.totalAudited}) • ${stats.skipsCount} Skips"
             } else {
                 sheet.tvSheetAuditSessionCount.text = "0 Audited"
                 sheet.tvSheetAuditSizeAccuracy.text = "--%"
                 sheet.tvSheetAuditColorAccuracy.text = "--%"
                 sheet.tvSheetAuditNumberAccuracy.text = "--%"
                 sheet.tvSheetAuditNetProfit.text = "Net: +0.00 Units (ROI: 0.0%)"
-                sheet.tvSheetAuditPrimaryWinRate.text = "Primary Edge: --%"
+                sheet.tvSheetAuditPrimaryWinRate.text = "Size Win Rate: --%"
             }
         }
 
         // WinGo History Draws Table Observer
         viewModel.wingoHistory.observe(this) { history ->
             renderWingoHistoryTable(history)
-            renderWingoBeadRoad(history)
         }
     }
 
@@ -1466,157 +1398,5 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
         }
         sheet.tvSheetPredStakingNote.text = note
         sheet.tvSheetPredStakingNote.setTextColor(ContextCompat.getColor(this, R.color.accent_cyan))
-    }
-
-    private fun renderWingoBeadRoad(history: List<WingoProtocolEngine.WingoDrawResult>) {
-        val container = binding.bottomSheetResearch.llSheetWingoBeadRoad
-        container.removeAllViews()
-
-        val recentItems = history.take(20).reversed()
-        if (recentItems.isEmpty()) {
-            val tv = TextView(this).apply {
-                text = "Awaiting draws..."
-                setTextColor(ContextCompat.getColor(context, R.color.text_muted))
-                textSize = 10f
-            }
-            container.addView(tv)
-            return
-        }
-
-        val density = resources.displayMetrics.density
-        val ballSize = (32 * density).roundToInt()
-        val margin = (4 * density).roundToInt()
-
-        for (item in recentItems) {
-            val ballLayout = android.widget.LinearLayout(this).apply {
-                orientation = android.widget.LinearLayout.VERTICAL
-                gravity = android.view.Gravity.CENTER
-                val params = android.widget.LinearLayout.LayoutParams(ballSize, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(margin, 0, margin, 0)
-                }
-                layoutParams = params
-            }
-
-            val ballColor = when (item.color.uppercase()) {
-                "RED", "RED_VIOLET" -> ContextCompat.getColor(this@MainActivity, R.color.wingo_red)
-                "GREEN", "GREEN_VIOLET" -> ContextCompat.getColor(this@MainActivity, R.color.wingo_green)
-                else -> ContextCompat.getColor(this@MainActivity, R.color.wingo_violet)
-            }
-
-            val tvBall = TextView(this).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(ballSize, ballSize)
-                gravity = android.view.Gravity.CENTER
-                text = item.number.toString()
-                setTextColor(Color.WHITE)
-                textSize = 12f
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
-                val d = ContextCompat.getDrawable(this@MainActivity, R.drawable.bg_wingo_ball)?.mutate()
-                d?.setTint(ballColor)
-                background = d
-            }
-
-            val tvSub = TextView(this).apply {
-                text = if (item.size == "BIG") "B" else "S"
-                setTextColor(if (item.size == "BIG") ContextCompat.getColor(this@MainActivity, R.color.wingo_big) else ContextCompat.getColor(this@MainActivity, R.color.wingo_small))
-                textSize = 9f
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
-                gravity = android.view.Gravity.CENTER
-                setPadding(0, 2, 0, 0)
-            }
-
-            ballLayout.addView(tvBall)
-            ballLayout.addView(tvSub)
-            container.addView(ballLayout)
-        }
-    }
-
-    private fun renderDigitSniperMatrix(metrics: List<WingoTrendAnalyzer.DigitMetric>) {
-        val container = binding.bottomSheetResearch.llSheetDigitSniperGrid
-        container.removeAllViews()
-
-        if (metrics.isEmpty()) return
-
-        val sortedByDigit = (0..9).map { d ->
-            metrics.find { it.digit == d } ?: WingoTrendAnalyzer.DigitMetric(d, "NEUTRAL", 10.0, 0, 0, "RED")
-        }
-        val row1Digits = sortedByDigit.take(5)
-        val row2Digits = sortedByDigit.drop(5)
-
-        val createRow = { digitList: List<WingoTrendAnalyzer.DigitMetric> ->
-            val row = android.widget.LinearLayout(this).apply {
-                orientation = android.widget.LinearLayout.HORIZONTAL
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                setPadding(0, 4, 0, 4)
-            }
-
-            for (m in digitList) {
-                val col = android.widget.LinearLayout(this).apply {
-                    orientation = android.widget.LinearLayout.VERTICAL
-                    gravity = android.view.Gravity.CENTER
-                    layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f)
-                }
-
-                val ballColor = when (m.colorName.uppercase()) {
-                    "RED", "RED_VIOLET" -> ContextCompat.getColor(this@MainActivity, R.color.wingo_red)
-                    "GREEN", "GREEN_VIOLET" -> ContextCompat.getColor(this@MainActivity, R.color.wingo_green)
-                    else -> ContextCompat.getColor(this@MainActivity, R.color.wingo_violet)
-                }
-
-                val ball = TextView(this).apply {
-                    val sizePx = (30 * resources.displayMetrics.density).roundToInt()
-                    layoutParams = android.widget.LinearLayout.LayoutParams(sizePx, sizePx)
-                    gravity = android.view.Gravity.CENTER
-                    text = m.digit.toString()
-                    setTextColor(Color.WHITE)
-                    textSize = 12f
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                    val d = ContextCompat.getDrawable(this@MainActivity, R.drawable.bg_wingo_ball)?.mutate()
-                    d?.setTint(ballColor)
-                    background = d
-                }
-
-                val tvProb = TextView(this).apply {
-                    text = "%.0f%%".format(m.probabilityPct)
-                    setTextColor(if (m.status == "TOP PICK") ContextCompat.getColor(this@MainActivity, R.color.accent_emerald) else ContextCompat.getColor(this@MainActivity, R.color.text_primary))
-                    textSize = 10f
-                    typeface = if (m.status == "TOP PICK") android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
-                }
-
-                val tvBadge = TextView(this).apply {
-                    text = when (m.status) {
-                        "TOP PICK" -> "TOP"
-                        "DUE" -> "DUE"
-                        "HOT" -> "HOT"
-                        else -> "G:${m.roundsSinceSeen}"
-                    }
-                    val badgeColor = when (m.status) {
-                        "TOP PICK" -> ContextCompat.getColor(this@MainActivity, R.color.accent_emerald)
-                        "HOT" -> ContextCompat.getColor(this@MainActivity, R.color.accent_rose)
-                        "DUE" -> ContextCompat.getColor(this@MainActivity, R.color.accent_amber)
-                        else -> ContextCompat.getColor(this@MainActivity, R.color.text_muted)
-                    }
-                    setTextColor(badgeColor)
-                    textSize = 8f
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                }
-
-                col.addView(ball)
-                col.addView(tvProb)
-                col.addView(tvBadge)
-
-                col.setOnClickListener {
-                    Toast.makeText(this@MainActivity, "Digit ${m.digit} (${m.colorName}) • Win Prob: ${"%.1f".format(m.probabilityPct)}% • Payout: 9.0x (1=900%) • Gap: ${m.roundsSinceSeen} rounds", Toast.LENGTH_SHORT).show()
-                }
-
-                row.addView(col)
-            }
-            row
-        }
-
-        container.addView(createRow(row1Digits))
-        container.addView(createRow(row2Digits))
     }
 }

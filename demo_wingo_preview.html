@@ -871,30 +871,7 @@
     </div>
   </div>
 
-  <!-- CASINO BEAD PLATE ROADMAP -->
-  <div class="bead-card">
-    <div class="section-title">
-      <span>⚪ CASINO BEAD PLATE ROADMAP</span>
-      <span style="font-size: 9px; color: var(--text-muted);">Chronological (Last 15 Draws)</span>
-    </div>
-    <div class="bead-scroll" id="beadPlateContainer">
-      <!-- Bead items rendered dynamically -->
-    </div>
-  </div>
 
-  <!-- DIGIT SNIPER MATRIX (0 - 9 Heatmap & Probabilities) -->
-  <div class="digit-matrix-card">
-    <div class="section-title">
-      <span style="color: var(--wingo-big);">🔢 DIGIT SNIPER MATRIX (0-9) • 900% PAYOUT (1=9.0x)</span>
-      <span style="font-size: 9px; color: var(--accent-emerald);">Top-3 Hit = +200% Profit</span>
-    </div>
-    <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 6px;">
-      Renewal density, Poisson cycle gap &amp; Markov transition frequencies
-    </div>
-    <div class="digits-grid" id="digitGrid">
-      <!-- Digits 0 to 9 rendered dynamically -->
-    </div>
-  </div>
 
   <!-- AUDIT & SIMULATED PnL SCOREBOARD -->
   <div class="audit-card">
@@ -1254,45 +1231,7 @@
     noteEl.style.color = 'var(--accent-cyan)';
   }
 
-  function renderBeadRoad(history) {
-    const container = document.getElementById('beadPlateContainer');
-    container.innerHTML = '';
-    const recent = [...history.slice(0, 15)].reverse();
 
-    recent.forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'bead-item';
-      div.innerHTML = `
-        <div class="bead-ball ball ${item.color.toLowerCase()}">${item.number}</div>
-        <span class="bead-tag ${item.size.toLowerCase()}">${item.size === 'BIG' ? 'B' : 'S'}</span>
-      `;
-      container.appendChild(div);
-    });
-  }
-
-  function renderDigitMatrix(metrics) {
-    const container = document.getElementById('digitGrid');
-    container.innerHTML = '';
-
-    // Sort 0 to 9 order
-    const sorted = [...metrics].sort((a, b) => a.digit - b.digit);
-    sorted.forEach(m => {
-      const cell = document.createElement('div');
-      cell.className = `digit-cell ${m.status === 'TOP PICK' ? 'top-pick' : ''}`;
-      const badgeClass = m.status === 'TOP PICK' ? 'badge-top' : m.status === 'DUE' ? 'badge-due' : m.status === 'HOT' ? 'badge-hot' : 'badge-gap';
-      const badgeText = m.status === 'TOP PICK' ? 'TOP' : m.status === 'DUE' ? 'DUE' : m.status === 'HOT' ? 'HOT' : `G:${m.gap}`;
-
-      cell.innerHTML = `
-        <div class="ball ${m.color.toLowerCase()}" style="width: 28px; height: 28px; font-size: 11px;">${m.digit}</div>
-        <span class="digit-prob" style="${m.status === 'TOP PICK' ? 'color: var(--accent-emerald)' : ''}">${m.prob}%</span>
-        <span class="digit-badge ${badgeClass}">${badgeText}</span>
-      `;
-      cell.onclick = () => {
-        alert(`Digit ${m.digit} (${m.color})\n• Hit Probability: ${m.prob}%\n• Payout: 9.0x (900% Reward)\n• Rounds Since Seen (Gap): ${m.gap} rounds\n• Status: ${m.status}`);
-      };
-      container.appendChild(cell);
-    });
-  }
 
   function renderAuditScoreboard() {
     let sizeHits = 0;
