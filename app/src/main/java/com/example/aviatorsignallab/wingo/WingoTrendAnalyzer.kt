@@ -250,10 +250,15 @@ object WingoTrendAnalyzer {
         val latest = chrono.last()
         val votes = mutableListOf<SubModelVote>()
 
-        // 1. Active Streak
+        // 1. Active Streak & Chop Length
         var activeStreakLen = 1
         for (i in total - 1 downTo 1) {
             if (chrono[i].size == chrono[i - 1].size) activeStreakLen++ else break
+        }
+
+        var chopLen = 1
+        for (i in total - 1 downTo 1) {
+            if (chrono[i].size != chrono[i - 1].size) chopLen++ else break
         }
 
         // 2. Shannon Entropy (H in [0.0, 1.0])
@@ -421,11 +426,13 @@ object WingoTrendAnalyzer {
         val evTop3Numbers = ((top3CombinedProb / 100.0) * 9.0) - 3.0
 
         // Strict Discipline Gating:
-        // ONLY skip when size probability has ZERO edge (49% - 51% dead neutral) or prolonged violent chop
-        val isDeadNeutral = kotlin.math.abs(calibratedSizeProb - 50.0) < 2.0
-        val isExtremeChop = primaryPattern.contains("CHOP") && activeStreakLen == 1 && entropy >= 0.98
+        // Skip when calibratedSizeProb has no positive mathematical edge (<= 52.5%), when models are in split equilibrium,
+        // or during high-disorder single-ball chop regimes (entropy >= 0.93 without double-pair structure).
+        val isDeadNeutral = calibratedSizeProb <= 52.5 || isEquilibrium
+        val isChopNoise = activeStreakLen == 1 && entropy >= 0.93 && !primaryPattern.contains("DOUBLE")
+        val isNegativeEV = evSize <= 0.0
 
-        val shouldSkip = (isDeadNeutral && isExtremeChop) || (evSize <= -0.06 && evColor <= -0.06)
+        val shouldSkip = isDeadNeutral || isChopNoise || isNegativeEV
 
         val primaryBetType: String
         val primaryBetTarget: String
