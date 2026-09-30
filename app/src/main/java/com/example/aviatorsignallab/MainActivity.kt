@@ -564,51 +564,20 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             } else {
                 sheet.tvSheetPredNumbers.visibility = View.GONE
             }
+        }
 
-            // Dynamic Tactical HUD Banner (High Conviction / Dragon Fade / Entropy Skip)
-            val activeRoomName = viewModel.activeWingoRoom.value?.displayName ?: "WinGo"
-            when (pred.bannerStatus) {
-                "DRAGON_FADE_ALERT" -> {
-                    binding.bannerWingoAlert.visibility = View.VISIBLE
-                    binding.bannerWingoAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
-                    binding.ivWingoAlertIcon.setImageResource(R.drawable.ic_warning)
-                    binding.ivWingoAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.wingo_dragon))
-                    binding.tvWingoAlertTitle.text = "🚨 DRAGON EXHAUSTION DETECTED"
-                    binding.tvWingoAlertSubtitle.text = "${pred.reasoning} • Action: FADE to ${pred.recommendedSize} (${pred.confidencePct}%)"
-                    binding.tvWingoAlertAction.text = "FADE BET"
-                }
-                "HIGH_CONVICTION_SNIPE" -> {
-                    binding.bannerWingoAlert.visibility = View.VISIBLE
-                    binding.bannerWingoAlert.setBackgroundResource(R.drawable.bg_prepare_alert)
-                    binding.ivWingoAlertIcon.setImageResource(R.drawable.ic_verified)
-                    binding.ivWingoAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_emerald))
-                    binding.tvWingoAlertTitle.text = "🎯 HIGH CONVICTION SNIPE (${pred.confidencePct}%)"
-                    binding.tvWingoAlertSubtitle.text = "BET: ${pred.recommendedSize} • Sizing: ${pred.kellyUnitSize} • ${pred.reasoning}"
-                    binding.tvWingoAlertAction.text = "SNIPE"
-                }
-                "HIGH_ENTROPY_SKIP" -> {
-                    binding.bannerWingoAlert.visibility = View.VISIBLE
-                    binding.bannerWingoAlert.setBackgroundResource(R.drawable.bg_status_badge)
-                    binding.ivWingoAlertIcon.setImageResource(R.drawable.ic_warning)
-                    binding.ivWingoAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_amber))
-                    binding.tvWingoAlertTitle.text = "🛑 HIGH ENTROPY: SKIP ROUND"
-                    binding.tvWingoAlertSubtitle.text = "Random noise regime (Entropy ${"%.2f".format(pred.shannonEntropy)}) • Skipping to protect bankroll"
-                    binding.tvWingoAlertAction.text = "SKIP"
-                }
-                else -> {
-                    val trend = viewModel.wingoTrendSummary.value
-                    if (trend != null && trend.isDragonActive) {
-                        binding.bannerWingoAlert.visibility = View.VISIBLE
-                        binding.bannerWingoAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
-                        binding.ivWingoAlertIcon.setImageResource(R.drawable.ic_warning)
-                        binding.ivWingoAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.wingo_dragon))
-                        binding.tvWingoAlertTitle.text = "🐉 DRAGON DETECTED: ${trend.currentStreakLength}x ${trend.currentStreakType}"
-                        binding.tvWingoAlertSubtitle.text = "Extreme parity run on $activeRoomName • Reversal Expected"
-                        binding.tvWingoAlertAction.text = "RADAR"
-                    } else {
-                        binding.bannerWingoAlert.visibility = View.GONE
-                    }
-                }
+        // Live Prediction Accuracy Audit Observer
+        viewModel.wingoAuditStats.observe(this) { stats ->
+            if (stats.totalAudited > 0) {
+                sheet.tvSheetAuditSessionCount.text = "${stats.totalAudited} Audited"
+                sheet.tvSheetAuditSizeAccuracy.text = "${stats.sizeWinPct.roundToInt()}% (${stats.sizeWins}/${stats.totalAudited})"
+                sheet.tvSheetAuditColorAccuracy.text = "${stats.colorWinPct.roundToInt()}% (${stats.colorWins}/${stats.totalAudited})"
+                sheet.tvSheetAuditNumberAccuracy.text = "${stats.numberWinPct.roundToInt()}% (${stats.numberWins}/${stats.totalAudited})"
+            } else {
+                sheet.tvSheetAuditSessionCount.text = "0 Audited"
+                sheet.tvSheetAuditSizeAccuracy.text = "--%"
+                sheet.tvSheetAuditColorAccuracy.text = "--%"
+                sheet.tvSheetAuditNumberAccuracy.text = "--%"
             }
         }
 
@@ -725,10 +694,23 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             }
         }
 
-        binding.bannerWingoAlert.setOnClickListener {
-            bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
-            sheet.btnSheetTabWingo.performClick()
+        val exportAction = {
+            val csvData = viewModel.exportWingoAuditCsv()
+            val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("WinGo Audit CSV", csvData)
+            clipboard?.setPrimaryClip(clip)
+
+            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "WinGo Prediction Audit & Rounds Data")
+                putExtra(android.content.Intent.EXTRA_TEXT, csvData)
+            }
+            startActivity(android.content.Intent.createChooser(shareIntent, "Export WinGo Audit & Data"))
+            Toast.makeText(this, "WinGo Audit & Data copied to clipboard!", Toast.LENGTH_LONG).show()
         }
+
+        sheet.btnSheetExportData.setOnClickListener { exportAction() }
+        sheet.btnSheetCardExport.setOnClickListener { exportAction() }
 
         binding.bannerPreCrashAlert.setOnClickListener {
             binding.bannerPreCrashAlert.visibility = View.GONE

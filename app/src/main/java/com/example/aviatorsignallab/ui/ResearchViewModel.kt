@@ -151,6 +151,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _wingoTrendSummary.postValue(state.trendSummary)
         _wingoTransitions.postValue(state.transitions)
         _wingoPrediction.postValue(state.prediction)
+        _wingoAuditStats.postValue(wingoEngine.getAuditStats(room))
         if (state.history.isNotEmpty()) {
             _latestWingoDraw.postValue(state.history.first())
         }
@@ -244,7 +245,18 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private val _wingoTransitions = MutableLiveData(WingoTrendAnalyzer.calculateTransitions(emptyList()))
     val wingoTransitions: LiveData<WingoTrendAnalyzer.TransitionProbabilities> = _wingoTransitions
 
+    private val _wingoAuditStats = MutableLiveData(WingoProtocolEngine.AuditStats())
+    val wingoAuditStats: LiveData<WingoProtocolEngine.AuditStats> = _wingoAuditStats
+
+    fun exportWingoAuditCsv(): String {
+        val currentRoom = _activeWingoRoom.value ?: WingoProtocolEngine.WingoRoom.WINGO_30S
+        return wingoEngine.exportDataAndAuditCsv(currentRoom)
+    }
+
     val wingoEngine: WingoProtocolEngine = WingoProtocolEngine(object : WingoProtocolEngine.WingoListener {
+        override fun onAuditUpdated(stats: WingoProtocolEngine.AuditStats, latestAudit: WingoProtocolEngine.WingoPredictionAudit?) {
+            _wingoAuditStats.postValue(stats)
+        }
         override fun onNewDrawResult(result: WingoProtocolEngine.WingoDrawResult, history: List<WingoProtocolEngine.WingoDrawResult>) {
             val targetRoom = WingoProtocolEngine.WingoRoom.fromPeriodId(result.periodId)
             if (targetRoom == null || targetRoom == _activeWingoRoom.value) {

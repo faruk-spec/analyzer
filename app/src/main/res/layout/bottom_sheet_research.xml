@@ -80,6 +80,17 @@
             android:padding="6dp"
             android:src="@drawable/ic_refresh"
             app:tint="@color/accent_cyan" />
+
+        <ImageButton
+            android:id="@+id/btnSheetExportData"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_pill_badge"
+            android:contentDescription="Export Rounds and Prediction Audit CSV"
+            android:padding="6dp"
+            android:src="@drawable/ic_download"
+            app:tint="@color/accent_emerald" />
     </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
@@ -330,6 +341,131 @@
                             android:text="Numbers: 5, 7, 9"
                             android:textColor="@color/wingo_big"
                             android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Live Session Accuracy & Audit Card -->
+                <LinearLayout
+                    android:id="@+id/cardSheetAudit"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card"
+                    android:backgroundTint="#0B192E"
+                    android:orientation="vertical"
+                    android:padding="10dp"
+                    android:layout_marginBottom="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="📊 LIVE AUDIT: PREDICTION ACCURACY"
+                            android:textColor="@color/accent_cyan"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSheetAuditSessionCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0 Audited"
+                            android:textColor="@color/text_muted"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal">
+
+                        <!-- Size Accuracy -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Size Win"
+                                android:textColor="@color/text_muted"
+                                android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/tvSheetAuditSizeAccuracy"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="--%"
+                                android:textColor="@color/wingo_big"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <!-- Color Accuracy -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Color Win"
+                                android:textColor="@color/text_muted"
+                                android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/tvSheetAuditColorAccuracy"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="--%"
+                                android:textColor="@color/wingo_green"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <!-- Number Top-3 Hit -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Num (Top-3)"
+                                android:textColor="@color/text_muted"
+                                android:textSize="9sp" />
+                            <TextView
+                                android:id="@+id/tvSheetAuditNumberAccuracy"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="--%"
+                                android:textColor="@color/accent_purple"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <!-- Quick Export Pill -->
+                        <TextView
+                            android:id="@+id/btnSheetCardExport"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical"
+                            android:background="@drawable/bg_pill_badge"
+                            android:paddingStart="8dp"
+                            android:paddingTop="5dp"
+                            android:paddingEnd="8dp"
+                            android:paddingBottom="5dp"
+                            android:text="📥 EXPORT"
+                            android:textColor="@color/accent_emerald"
+                            android:textSize="9sp"
                             android:textStyle="bold" />
                     </LinearLayout>
                 </LinearLayout>

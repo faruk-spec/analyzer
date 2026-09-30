@@ -67,6 +67,34 @@ class WingoProtocolEngine(
         val room: WingoRoom
     )
 
+    data class WingoPredictionAudit(
+        val periodId: String,
+        val room: WingoRoom,
+        val predictedSize: String,
+        val actualSize: String,
+        val isSizeWin: Boolean,
+        val predictedColor: String,
+        val actualColor: String,
+        val isColorWin: Boolean,
+        val predictedNumbers: List<Int>,
+        val actualNumber: Int,
+        val isNumberWin: Boolean,
+        val confidencePct: Int,
+        val patternName: String,
+        val actionType: String,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
+    data class AuditStats(
+        val totalAudited: Int = 0,
+        val sizeWins: Int = 0,
+        val sizeWinPct: Double = 0.0,
+        val colorWins: Int = 0,
+        val colorWinPct: Double = 0.0,
+        val numberWins: Int = 0,
+        val numberWinPct: Double = 0.0
+    )
+
     data class RoomState(
         val room: WingoRoom,
         var currentPeriod: String = "--",
@@ -75,13 +103,16 @@ class WingoProtocolEngine(
         val history: MutableList<WingoDrawResult> = mutableListOf(),
         var trendSummary: WingoTrendAnalyzer.TrendSummary = WingoTrendAnalyzer.analyzeTrends(emptyList()),
         var transitions: WingoTrendAnalyzer.TransitionProbabilities = WingoTrendAnalyzer.calculateTransitions(emptyList()),
-        var prediction: WingoTrendAnalyzer.BetPrediction = WingoTrendAnalyzer.predictNextBet(emptyList())
+        var prediction: WingoTrendAnalyzer.BetPrediction = WingoTrendAnalyzer.predictNextBet(emptyList()),
+        val pendingPredictions: MutableMap<String, WingoTrendAnalyzer.BetPrediction> = mutableMapOf(),
+        val auditHistory: MutableList<WingoPredictionAudit> = mutableListOf()
     )
 
     interface WingoListener {
         fun onNewDrawResult(result: WingoDrawResult, history: List<WingoDrawResult>) {}
         fun onIssueUpdated(issue: WingoIssueInfo) {}
         fun onHistoryLoaded(results: List<WingoDrawResult>) {}
+        fun onAuditUpdated(stats: AuditStats, latestAudit: WingoPredictionAudit?) {}
         fun onRoomUpdated(
             room: WingoRoom,
             issue: WingoIssueInfo,
@@ -313,6 +344,13 @@ class WingoProtocolEngine(
         val validDraws = draws.filter { it.periodId != "--" && it.periodId.length >= 8 && it.periodId.all { c -> c.isDigit() } }
         if (validDraws.isEmpty()) return
 
+        // Audit any pending predictions matching incoming draws
+        for (item in validDraws) {
+            if (state.pendingPredictions.containsKey(item.periodId)) {
+                auditDrawResult(room, item)
+            }
+        }
+
         synchronized(state.history) {
             val existingIds = state.history.map { it.periodId }.toMutableSet()
             for (item in validDraws) {
@@ -329,6 +367,9 @@ class WingoProtocolEngine(
         state.trendSummary = WingoTrendAnalyzer.analyzeTrends(state.history)
         state.transitions = WingoTrendAnalyzer.calculateTransitions(state.history)
         state.prediction = WingoTrendAnalyzer.predictNextBet(state.history, state.currentPeriod)
+        if (state.prediction.targetPeriod != "--") {
+            state.pendingPredictions[state.prediction.targetPeriod] = state.prediction
+        }
 
         val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
         if (room == activeRoom) {
@@ -340,6 +381,10 @@ class WingoProtocolEngine(
     private fun registerNewDraw(room: WingoRoom, draw: WingoDrawResult) {
         if (draw.periodId == "--" || draw.periodId.length < 8 || !draw.periodId.all { it.isDigit() }) return
         val state = roomStates[room] ?: return
+
+        // Audit before updating history
+        auditDrawResult(room, draw)
+
         val snapshot = synchronized(state.history) {
             if (state.history.none { it.periodId == draw.periodId }) {
                 state.history.add(draw)
@@ -352,12 +397,115 @@ class WingoProtocolEngine(
         state.trendSummary = WingoTrendAnalyzer.analyzeTrends(snapshot)
         state.transitions = WingoTrendAnalyzer.calculateTransitions(snapshot)
         state.prediction = WingoTrendAnalyzer.predictNextBet(snapshot, state.currentPeriod)
+        if (state.prediction.targetPeriod != "--") {
+            state.pendingPredictions[state.prediction.targetPeriod] = state.prediction
+        }
 
         val issue = WingoIssueInfo(state.currentPeriod, state.remainingSeconds, state.isLocked, room)
         if (room == activeRoom) {
             listener?.onNewDrawResult(draw, snapshot)
             listener?.onRoomUpdated(room, issue, snapshot, state.trendSummary, state.transitions, state.prediction)
         }
+    }
+
+    private fun auditDrawResult(room: WingoRoom, draw: WingoDrawResult) {
+        val state = roomStates[room] ?: return
+        val pendingPred = state.pendingPredictions.remove(draw.periodId) ?: return
+
+        val isSizeWin = draw.size.equals(pendingPred.recommendedSize, ignoreCase = true)
+        val isColorWin = draw.color.uppercase().contains(pendingPred.recommendedColor.uppercase())
+        val isNumberWin = pendingPred.recommendedNumbers.contains(draw.number)
+
+        val record = WingoPredictionAudit(
+            periodId = draw.periodId,
+            room = room,
+            predictedSize = pendingPred.recommendedSize,
+            actualSize = draw.size,
+            isSizeWin = isSizeWin,
+            predictedColor = pendingPred.recommendedColor,
+            actualColor = draw.color,
+            isColorWin = isColorWin,
+            predictedNumbers = pendingPred.recommendedNumbers,
+            actualNumber = draw.number,
+            isNumberWin = isNumberWin,
+            confidencePct = pendingPred.confidencePct,
+            patternName = pendingPred.patternName,
+            actionType = pendingPred.actionType
+        )
+
+        synchronized(state.auditHistory) {
+            state.auditHistory.add(0, record)
+            while (state.auditHistory.size > 200) {
+                state.auditHistory.removeAt(state.auditHistory.size - 1)
+            }
+        }
+
+        val stats = getAuditStats(room)
+        listener?.onAuditUpdated(stats, record)
+    }
+
+    fun getAuditStats(room: WingoRoom = activeRoom): AuditStats {
+        val state = roomStates[room] ?: return AuditStats()
+        synchronized(state.auditHistory) {
+            val total = state.auditHistory.size
+            if (total == 0) return AuditStats()
+            val sizeWins = state.auditHistory.count { it.isSizeWin }
+            val colorWins = state.auditHistory.count { it.isColorWin }
+            val numberWins = state.auditHistory.count { it.isNumberWin }
+            return AuditStats(
+                totalAudited = total,
+                sizeWins = sizeWins,
+                sizeWinPct = (sizeWins.toDouble() / total) * 100.0,
+                colorWins = colorWins,
+                colorWinPct = (colorWins.toDouble() / total) * 100.0,
+                numberWins = numberWins,
+                numberWinPct = (numberWins.toDouble() / total) * 100.0
+            )
+        }
+    }
+
+    fun exportDataAndAuditCsv(room: WingoRoom = activeRoom): String {
+        val state = roomStates[room] ?: return "No data available"
+        val sb = StringBuilder()
+        val stats = getAuditStats(room)
+
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+        val exportTime = sdf.format(java.util.Date())
+
+        sb.appendLine("==================================================")
+        sb.appendLine("WINGO AI INTELLIGENCE & ACCURACY AUDIT EXPORT")
+        sb.appendLine("Exported At: $exportTime")
+        sb.appendLine("Room: ${room.displayName} (${room.roomCode})")
+        sb.appendLine("Total Live Audited Rounds: ${stats.totalAudited}")
+        sb.appendLine("Size Prediction Accuracy: ${"%.1f".format(stats.sizeWinPct)}% (${stats.sizeWins}/${stats.totalAudited} Hits)")
+        sb.appendLine("Color Prediction Accuracy: ${"%.1f".format(stats.colorWinPct)}% (${stats.colorWins}/${stats.totalAudited} Hits)")
+        sb.appendLine("Top-3 Numbers Accuracy: ${"%.1f".format(stats.numberWinPct)}% (${stats.numberWins}/${stats.totalAudited} Hits)")
+        sb.appendLine("==================================================")
+        sb.appendLine()
+
+        sb.appendLine("SECTION 1: LIVE PREDICTION AUDIT LOG")
+        sb.appendLine("Period,Room,Pred_Size,Actual_Size,Size_Hit,Pred_Color,Actual_Color,Color_Hit,Pred_Numbers,Actual_Number,Number_Hit,Algo_Confidence,Pattern,Action_Type")
+
+        synchronized(state.auditHistory) {
+            for (audit in state.auditHistory) {
+                val sizeResult = if (audit.isSizeWin) "WIN" else "LOSS"
+                val colorResult = if (audit.isColorWin) "WIN" else "LOSS"
+                val numResult = if (audit.isNumberWin) "WIN" else "LOSS"
+                val nums = "\"${audit.predictedNumbers.joinToString(";")}\""
+                sb.appendLine("${audit.periodId},${audit.room.roomCode},${audit.predictedSize},${audit.actualSize},$sizeResult,${audit.predictedColor},${audit.actualColor},$colorResult,$nums,${audit.actualNumber},$numResult,${audit.confidencePct}%,${audit.patternName},${audit.actionType}")
+            }
+        }
+        sb.appendLine()
+
+        sb.appendLine("SECTION 2: ALL RECORDED DRAWS")
+        sb.appendLine("Period,Number,Size,Color,Timestamp")
+        synchronized(state.history) {
+            for (draw in state.history) {
+                sb.appendLine("${draw.periodId},${draw.number},${draw.size},${draw.color},${draw.timestamp}")
+            }
+        }
+
+        return sb.toString()
     }
 
     fun getRecentResults(room: WingoRoom = activeRoom): List<WingoDrawResult> {

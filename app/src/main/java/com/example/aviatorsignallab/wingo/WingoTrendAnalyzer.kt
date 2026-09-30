@@ -403,32 +403,32 @@ object WingoTrendAnalyzer {
         val bannerStatus: String
 
         if (actionType == "DRAGON_REVERSAL") {
-            safetyTier = "HIGH CONFIDENCE"
-            confidencePct = if (activeStreakLen >= 6) 90 else 84
+            safetyTier = "HIGH CONVICTION"
+            confidencePct = if (activeStreakLen >= 6) 72 else 68
             finalReason = primaryReason
             kellyUnitSize = "2 UNITS (SNIPE)"
             bannerStatus = "DRAGON_FADE_ALERT"
         } else if (isHighEntropyNoise) {
             safetyTier = "CAUTION / SKIP"
-            confidencePct = 52
-            finalReason = "High Shannon Entropy (H=%.2f) • Random coin-flip noise • Filter advises SKIP to protect bankroll".format(entropy)
+            confidencePct = 51
+            finalReason = "High Shannon Entropy (H=%.2f) • Pure random noise regime • Skip round to preserve capital".format(entropy)
             kellyUnitSize = "0 UNITS (SKIP)"
             bannerStatus = "HIGH_ENTROPY_SKIP"
         } else if (!isEquilibrium && consensusRatio >= 0.72 && dominantVotes >= 2) {
-            safetyTier = "HIGH CONFIDENCE"
-            confidencePct = (78 + (consensusRatio - 0.72) * 50).roundToInt().coerceIn(78, 92)
+            safetyTier = "HIGH CONVICTION"
+            confidencePct = (64 + (consensusRatio - 0.72) * 24).roundToInt().coerceIn(64, 70)
             finalReason = primaryReason
             kellyUnitSize = "2 UNITS (SNIPE)"
             bannerStatus = "HIGH_CONVICTION_SNIPE"
         } else if (!isEquilibrium && consensusRatio >= 0.58) {
-            safetyTier = "MODERATE"
-            confidencePct = (64 + (consensusRatio - 0.58) * 45).roundToInt().coerceIn(64, 76)
+            safetyTier = "MODERATE EDGE"
+            confidencePct = (58 + (consensusRatio - 0.58) * 22).roundToInt().coerceIn(58, 64)
             finalReason = primaryReason
             kellyUnitSize = "1 UNIT (STANDARD)"
             bannerStatus = "NORMAL"
         } else {
-            safetyTier = "CAUTION / SKIP"
-            confidencePct = 54
+            safetyTier = "NEUTRAL / EQUILIBRIUM"
+            confidencePct = 53
             finalReason = if (isEquilibrium) primaryReason else "Diverging Models ($modelConsensus) • High Volatility / Chop"
             kellyUnitSize = "0 UNITS (SKIP)"
             bannerStatus = "HIGH_ENTROPY_SKIP"
@@ -657,69 +657,197 @@ object WingoTrendAnalyzer {
         } else null
     }
 
-    private fun forecastColor(chrono: List<WingoProtocolEngine.WingoDrawResult>, predictedSize: String): String {
+    fun forecastColor(
+        chrono: List<WingoProtocolEngine.WingoDrawResult>,
+        predictedSize: String
+    ): String {
         if (chrono.isEmpty()) return "GREEN"
-        val lastColor = chrono.last().color.uppercase()
+        val total = chrono.size
+        val latest = chrono.last()
+        val latestColor = if (latest.color.contains("GREEN")) "GREEN" else "RED"
 
-        var redToGreen = 0
-        var redToRed = 0
-        var greenToGreen = 0
-        var greenToRed = 0
+        var weightGreen = 0.0
+        var weightRed = 0.0
 
-        for (i in 0 until chrono.size - 1) {
-            val curr = chrono[i].color.uppercase()
-            val next = chrono[i + 1].color.uppercase()
-            if (curr.contains("RED")) {
-                if (next.contains("GREEN")) redToGreen++ else if (next.contains("RED")) redToRed++
-            } else if (curr.contains("GREEN")) {
-                if (next.contains("RED")) greenToRed++ else if (next.contains("GREEN")) greenToGreen++
+        // Factor 1: Color Streak Fatigue (Consecutive same color)
+        var colorStreak = 1
+        for (i in total - 1 downTo 1) {
+            val cCurr = if (chrono[i].color.contains("GREEN")) "GREEN" else "RED"
+            val cPrev = if (chrono[i - 1].color.contains("GREEN")) "GREEN" else "RED"
+            if (cCurr == cPrev) colorStreak++ else break
+        }
+        if (colorStreak >= 4) {
+            // Extreme streak: heavily fade
+            if (latestColor == "RED") weightGreen += 3.8 else weightRed += 3.8
+        } else if (colorStreak == 3) {
+            if (latestColor == "RED") weightGreen += 2.6 else weightRed += 2.6
+        } else if (colorStreak == 2) {
+            // Check if 2-2 pattern exists
+            if (total >= 4) {
+                val c0 = if (chrono[total - 4].color.contains("GREEN")) "GREEN" else "RED"
+                val c1 = if (chrono[total - 3].color.contains("GREEN")) "GREEN" else "RED"
+                val c2 = if (chrono[total - 2].color.contains("GREEN")) "GREEN" else "RED"
+                val c3 = if (chrono[total - 1].color.contains("GREEN")) "GREEN" else "RED"
+                if (c0 == c1 && c2 == c3 && c0 != c2) {
+                    // 2-2 rhythm: completed 2 of c2, flip to c0!
+                    if (c0 == "GREEN") weightGreen += 3.2 else weightRed += 3.2
+                }
             }
         }
 
-        return if (lastColor.contains("RED")) {
-            if (redToGreen > redToRed) "GREEN" else "RED"
-        } else {
-            if (greenToRed > greenToGreen) "RED" else "GREEN"
+        // Factor 2: Alternation Chop (1-1 ping-pong)
+        var colorChop = 1
+        for (i in total - 1 downTo 1) {
+            val cCurr = if (chrono[i].color.contains("GREEN")) "GREEN" else "RED"
+            val cPrev = if (chrono[i - 1].color.contains("GREEN")) "GREEN" else "RED"
+            if (cCurr != cPrev) colorChop++ else break
+        }
+        if (colorChop >= 3) {
+            // 1-1 alternation chop continuation
+            if (latestColor == "RED") weightGreen += 3.0 else weightRed += 3.0
+        }
+
+        // Factor 3: Rolling Window Parity Imbalance (last 20 draws)
+        val window = chrono.takeLast(20)
+        val greenCount = window.count { it.color.contains("GREEN") }
+        val redCount = window.count { it.color.contains("RED") }
+        if (greenCount >= 13) {
+            // Green over-represented -> Red mean reversion
+            weightRed += (2.2 + (greenCount - 12) * 0.4)
+        } else if (redCount >= 13) {
+            // Red over-represented -> Green mean reversion
+            weightGreen += (2.2 + (redCount - 12) * 0.4)
+        }
+
+        // Factor 4: Bayesian Prior conditioned on Predicted Size
+        // In BIG (5,6,7,8,9): 5,7,9 are GREEN (60%), 6,8 are RED (40%)
+        // In SMALL (0,1,2,3,4): 0,2,4 are RED (60%), 1,3 are GREEN (40%)
+        if (predictedSize == "BIG") {
+            weightGreen += 1.4
+        } else if (predictedSize == "SMALL") {
+            weightRed += 1.4
+        }
+
+        // Factor 5: Order-2 Markov for Color Transitions
+        if (total >= 8) {
+            val prev1 = if (chrono[total - 2].color.contains("GREEN")) "GREEN" else "RED"
+            val prev0 = latestColor
+            var markovGreen = 0
+            var markovRed = 0
+            for (i in 0 until total - 2) {
+                val cA = if (chrono[i].color.contains("GREEN")) "GREEN" else "RED"
+                val cB = if (chrono[i + 1].color.contains("GREEN")) "GREEN" else "RED"
+                val cC = if (chrono[i + 2].color.contains("GREEN")) "GREEN" else "RED"
+                if (cA == prev1 && cB == prev0) {
+                    if (cC == "GREEN") markovGreen++ else markovRed++
+                }
+            }
+            val markovTotal = markovGreen + markovRed
+            if (markovTotal >= 3) {
+                if (markovGreen > markovRed) {
+                    val ratio = markovGreen.toDouble() / markovTotal
+                    if (ratio >= 0.6) weightGreen += 2.4
+                } else if (markovRed > markovGreen) {
+                    val ratio = markovRed.toDouble() / markovTotal
+                    if (ratio >= 0.6) weightRed += 2.4
+                }
+            }
+        }
+
+        return if (weightGreen > weightRed) "GREEN" else if (weightRed > weightGreen) "RED" else {
+            if (predictedSize == "BIG") "GREEN" else "RED"
         }
     }
 
-    private fun rankNumbers(
+    fun rankNumbers(
         chrono: List<WingoProtocolEngine.WingoDrawResult>,
         predictedSize: String,
         predictedColor: String
     ): List<Int> {
-        val window = chrono.takeLast(40)
+        if (chrono.isEmpty()) {
+            return if (predictedSize == "BIG") listOf(7, 9, 6) else listOf(1, 3, 2)
+        }
+
+        val window = chrono.takeLast(35)
         val counts = IntArray(10)
-        val lastSeen = IntArray(10) { 99 }
+        val roundsSinceSeen = IntArray(10) { 99 }
 
         for ((idx, draw) in window.reversed().withIndex()) {
             val n = draw.number
             if (n in 0..9) {
                 counts[n]++
-                if (lastSeen[n] == 99) lastSeen[n] = idx
+                if (roundsSinceSeen[n] == 99) roundsSinceSeen[n] = idx
             }
         }
 
-        val candidates = (0..9).filter { num ->
-            val matchSize = if (predictedSize == "BIG") num >= 5 else num < 5
-            val matchColor = when {
-                num == 0 -> predictedColor == "RED"
-                num == 5 -> predictedColor == "GREEN"
-                num in listOf(1, 3, 7, 9) -> predictedColor == "GREEN"
-                else -> predictedColor == "RED"
+        // Rolling 6-draw Moving Average
+        val recent6 = chrono.takeLast(6)
+        val avg6 = if (recent6.isNotEmpty()) recent6.map { it.number }.average() else 4.5
+
+        // Digit transitions from last number
+        val lastNum = chrono.last().number
+        val transitionCounts = IntArray(10)
+        for (i in 0 until chrono.size - 1) {
+            if (chrono[i].number == lastNum) {
+                val nextNum = chrono[i + 1].number
+                if (nextNum in 0..9) {
+                    transitionCounts[nextNum]++
+                }
             }
-            matchSize && matchColor
         }
 
-        val scored = candidates.map { num ->
-            val freqScore = counts[num] * 1.5
-            val dueScore = if (lastSeen[num] >= 8) 3.0 else 0.0
-            Pair(num, freqScore + dueScore)
-        }.sortedByDescending { it.second }
+        // Score every digit 0..9 across multiple statistical factors (no hard pruning)
+        val scores = DoubleArray(10)
 
-        return scored.take(3).map { it.first }.ifEmpty {
-            if (predictedSize == "BIG") listOf(6, 7, 8) else listOf(1, 2, 3)
+        for (d in 0..9) {
+            var score = 0.0
+
+            // 1. Size Affinity (+2.5 bonus if matches predicted size)
+            val isBig = d >= 5
+            if ((predictedSize == "BIG" && isBig) || (predictedSize == "SMALL" && !isBig)) {
+                score += 2.5
+            }
+
+            // 2. Color Affinity (+2.0 bonus if matches predicted color)
+            val dColor = when {
+                d == 0 -> "RED"
+                d == 5 -> "GREEN"
+                d in listOf(1, 3, 7, 9) -> "GREEN"
+                else -> "RED"
+            }
+            if (dColor == predictedColor || (d in listOf(0, 5) && predictedColor.isNotEmpty())) {
+                score += 2.0
+            }
+
+            // 3. Momentum (Hot Number in recent window)
+            score += (counts[d] * 0.9)
+
+            // 4. Overdue Cycle Rebound (Due Numbers)
+            val gap = roundsSinceSeen[d]
+            if (gap >= 12) {
+                score += 2.5 // strongly due
+            } else if (gap >= 8) {
+                score += 1.4 // moderately due
+            } else if (gap == 0) {
+                score += 0.8 // immediate repeat candidate
+            }
+
+            // 5. Mean Reversion Gravitation from Moving Average
+            if (avg6 >= 6.0 && d < 5) {
+                score += 1.3
+            } else if (avg6 <= 3.0 && d >= 5) {
+                score += 1.3
+            }
+
+            // 6. Direct Historical Transition from Previous Digit
+            score += (transitionCounts[d] * 1.1)
+
+            scores[d] = score
         }
+
+        // Sort all digits by composite score descending and pick Top 3
+        val ranked = (0..9).sortedByDescending { scores[it] }
+        return ranked.take(3)
     }
 
     private fun Double.roundToOneDecimal(): Double = (this * 10.0).roundToInt() / 10.0
