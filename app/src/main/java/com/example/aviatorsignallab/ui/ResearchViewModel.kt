@@ -29,6 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -98,6 +99,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
     private val _totalEvents = MutableLiveData(0)
     val totalEvents: LiveData<Int> = _totalEvents
+    private val totalEventsCount = AtomicInteger(0)
+    private var lastTrafficPostTime = 0L
+    private var lastPacketPostTime = 0L
 
     private val _currentRoundId = MutableLiveData("--")
     val currentRoundId: LiveData<String> = _currentRoundId
@@ -514,6 +518,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             val rCount = db.roundDao().getRoundsCount()
             val eCount = db.liveEventDao().getTotalEventsCount()
+            totalEventsCount.set(eCount)
             _totalRounds.postValue(rCount)
             _totalEvents.postValue(eCount)
 
@@ -537,6 +542,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
                 delay(1000)
                 val countInSecond = recentEventCounter.getAndSet(0)
                 _liveEventRate.postValue("$countInSecond evt/s")
+                _totalEvents.postValue(totalEventsCount.get())
 
                 if (protocolEngine.currentState == GameState.LIVE) {
                     val elapsed = (System.currentTimeMillis() - protocolEngine.roundStartTime).toDouble() / 1000.0
@@ -591,12 +597,16 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             size = size.coerceAtLeast(safePayload.length)
         )
 
+        val now = System.currentTimeMillis()
         synchronized(trafficBuffer) {
             if (trafficBuffer.size >= 300) {
                 trafficBuffer.removeAt(0)
             }
             trafficBuffer.add(item)
-            _trafficItems.postValue(trafficBuffer.toList())
+            if (now - lastTrafficPostTime >= 250) {
+                lastTrafficPostTime = now
+                _trafficItems.postValue(trafficBuffer.toList())
+            }
         }
 
         // Disassemble packet and process live player bets & cashouts
@@ -604,7 +614,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         synchronized(packetDisassemblyBuffer) {
             if (packetDisassemblyBuffer.size >= 100) packetDisassemblyBuffer.removeAt(0)
             packetDisassemblyBuffer.add(disassembled)
-            _recentDisassembledPackets.postValue(packetDisassemblyBuffer.toList())
+            if (now - lastPacketPostTime >= 250) {
+                lastPacketPostTime = now
+                _recentDisassembledPackets.postValue(packetDisassemblyBuffer.toList())
+            }
         }
 
         val telemetry = ServerReverseEngine.processPacket(disassembled.opcode, safePayload, protocolEngine.currentMultiplier)
@@ -627,29 +640,19 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         // Real-time tick feed: record live multiplier ticks into LiveTickCadenceAnalyzer
         val isMultiplierTick = transport == "WEBSOCKET" && (safePayload.contains("\"cmd\":85") || safePayload.contains("\"mul\""))
         if (isMultiplierTick) {
-            liveTickAnalyzer.recordTick(System.currentTimeMillis())
+            liveTickAnalyzer.recordTick(now)
         }
 
-        // OPTIMIZATION: For crash packets, process on the current thread immediately
-        // to eliminate coroutine scheduling latency (~2-10ms saved).
-        // Crash packets are short, so the processing cost on the JS bridge thread is minimal.
-        val isCrashPacket = transport == "WEBSOCKET" && safePayload.contains("\"sta\":3") && safePayload.contains("\"cmd\":84")
+        // ZERO-LATENCY FAST PATH: Process state transitions immediately on caller thread
+        // Prevents coroutine queue delays and ensures instantaneous multiplier updates across rounds
+        val event = protocolEngine.processRawEvent(transport, direction, payload)
+        totalEventsCount.incrementAndGet()
 
-        if (isCrashPacket) {
-            // Process synchronously on current thread for zero-latency crash handling
-            val event = protocolEngine.processRawEvent(transport, direction, payload)
-            viewModelScope.launch(Dispatchers.IO) {
+        // Asynchronously persist event to database without blocking live event stream
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
                 db.liveEventDao().insertEvent(event)
-                val total = db.liveEventDao().getTotalEventsCount()
-                _totalEvents.postValue(total)
-            }
-        } else {
-            viewModelScope.launch(Dispatchers.IO) {
-                val event = protocolEngine.processRawEvent(transport, direction, payload)
-                db.liveEventDao().insertEvent(event)
-                val total = db.liveEventDao().getTotalEventsCount()
-                _totalEvents.postValue(total)
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -851,47 +854,50 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _preCrashAlert.postValue(null)
 
         viewModelScope.launch(Dispatchers.IO) {
-            val round = protocolEngine.completeRound() ?: return@launch
-            db.roundDao().updateRound(round)
+            try {
+                val round = protocolEngine.completeRound() ?: return@launch
+                db.roundDao().updateRound(round)
 
-            // Extract Pre-Crash and Matched Control Features
-            val allRoundEvents = db.liveEventDao().getEventsForRound(roundId)
-            val preCrashFeatures = FeatureExtractor.extractPreCrashFeatures(round, allRoundEvents)
-            val controlFeatures = FeatureExtractor.extractControlFeatures(round, allRoundEvents)
+                // Extract Pre-Crash and Matched Control Features
+                val allRoundEvents = db.liveEventDao().getEventsForRound(roundId)
+                val preCrashFeatures = FeatureExtractor.extractPreCrashFeatures(round, allRoundEvents)
+                val controlFeatures = FeatureExtractor.extractControlFeatures(round, allRoundEvents)
 
-            val combinedFeatures = preCrashFeatures + controlFeatures
-            db.featureDao().insertFeatures(combinedFeatures)
+                val combinedFeatures = preCrashFeatures + controlFeatures
+                db.featureDao().insertFeatures(combinedFeatures)
 
-            // Run Scientific Analysis across all collected rounds
-            val allFeatures = db.featureDao().getAllFeatures()
-            val totalRCount = db.roundDao().getRoundsCount()
-            val totalECount = db.liveEventDao().getTotalEventsCount()
+                // Offload CPU-bound dataset analysis to Dispatchers.Default so Dispatchers.IO is free for live events
+                withContext(Dispatchers.Default) {
+                    val allFeatures = db.featureDao().getAllFeatures()
+                    val totalRCount = db.roundDao().getRoundsCount()
+                    val totalECount = totalEventsCount.get()
 
-            val (summary, patterns) = analysisEngine.analyzeDataset(totalRCount, totalECount, allFeatures)
-            if (patterns.isNotEmpty()) {
-                db.featureDao().insertPatterns(patterns)
-                protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.descriptor })
-            }
-            _researchSummary.postValue(summary)
-            _totalRounds.postValue(totalRCount)
+                    val (summary, patterns) = analysisEngine.analyzeDataset(totalRCount, totalECount, allFeatures)
+                    if (patterns.isNotEmpty()) {
+                        db.featureDao().insertPatterns(patterns)
+                        protocolEngine.updateValidatedPatterns(patterns.filter { it.isValidated }.map { it.descriptor })
+                    }
+                    _researchSummary.postValue(summary)
+                    _totalRounds.postValue(totalRCount)
 
-            // Recalculate empirical statistics with new crash round
-            val allRounds = db.roundDao().getAllRounds()
-            val stats = ProbabilityEngine.analyzeEmpiricalDistribution(allRounds)
-            _empiricalStats.postValue(stats)
-
-            // Diagnostics for live round tick cadence
-            val cadenceDiag = liveTickAnalyzer.getDiagnostics()
-            onDiagnosticsReceived("[CADENCE] Round finished at ${"%.2f".format(round.finalMultiplier)}x. $cadenceDiag")
-
-            // Trigger Automatic Webhook Telemetry Sync if enabled
-            if (webhookSyncManager.isSyncEnabled) {
-                webhookSyncManager.sendRoundTelemetry(round, allRoundEvents).onSuccess {
-                    onDiagnosticsReceived("Webhook sync: Sent round ${round.roundId} successfully")
-                }.onFailure { err ->
-                    onDiagnosticsReceived("Webhook sync failed: ${err.message}")
+                    val allRounds = db.roundDao().getAllRounds()
+                    val stats = ProbabilityEngine.analyzeEmpiricalDistribution(allRounds)
+                    _empiricalStats.postValue(stats)
                 }
-            }
+
+                // Diagnostics for live round tick cadence
+                val cadenceDiag = liveTickAnalyzer.getDiagnostics()
+                onDiagnosticsReceived("[CADENCE] Round finished at ${"%.2f".format(round.finalMultiplier)}x. $cadenceDiag")
+
+                // Trigger Automatic Webhook Telemetry Sync if enabled
+                if (webhookSyncManager.isSyncEnabled) {
+                    webhookSyncManager.sendRoundTelemetry(round, allRoundEvents).onSuccess {
+                        onDiagnosticsReceived("Webhook sync: Sent round ${round.roundId} successfully")
+                    }.onFailure { err ->
+                        onDiagnosticsReceived("Webhook sync failed: ${err.message}")
+                    }
+                }
+            } catch (e: Exception) {}
         }
     }
 
@@ -919,6 +925,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             liveTickAnalyzer.onNewRound("")
 
             _totalRounds.postValue(0)
+            totalEventsCount.set(0)
             _totalEvents.postValue(0)
             _tickFreezeStatus.postValue("")
             _researchSummary.postValue(ResearchSummary())
