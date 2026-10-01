@@ -675,11 +675,13 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val currentMult = protocolEngine.currentMultiplier
 
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
-        val mult = if (parsed >= 1.10) parsed else currentMult
+        // Real-time authoritative live multiplier: ALWAYS use the highest active multiplier reached
+        // Completely prevents any lag or showing an already-passed multiplier!
+        val mult = maxOf(currentMult, parsed)
 
         // STRICT: Multiplier MUST have started and climbed past takeoff (>= 1.20x)
         // Completely eliminates any vibration before multiplier start or during countdown/betting
-        if (mult < 1.20 && currentMult < 1.20) return
+        if (mult < 1.20) return
 
         // Dedup & High-Multiplier Escalation:
         // Allows initial alert, AND allows high-tier escalation if round climbs higher (e.g. 5x, 10x, 20x)
@@ -852,20 +854,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {
         _currentMultiplier.postValue(finalMultiplier)
 
-        // If early pre-crash alert was fired, update multiplier and fade out cleanly
-        if (fastPathCrashFiredForRound.get()) {
-            val current = _preCrashAlert.value
-            if (current != null && current.active) {
-                _preCrashAlert.postValue(current.copy(multiplier = finalMultiplier))
-            }
-        }
-
-        viewModelScope.launch {
-            delay(2500L)
-            if (protocolEngine.currentState != GameState.LIVE) {
-                _preCrashAlert.postValue(null)
-            }
-        }
+        // Clear any pre-crash alert immediately upon crash so no delayed/post-crash alert stays or re-fires!
+        _preCrashAlert.postValue(null)
 
         viewModelScope.launch(Dispatchers.IO) {
             val round = protocolEngine.completeRound() ?: return@launch

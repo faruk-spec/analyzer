@@ -279,7 +279,7 @@ object ScriptInjector {
                                 var match = strictCanvasMultRegex.exec(trimmed);
                                 if (match && match[1]) {
                                     var num = parseFloat(match[1]);
-                                    if (num >= 1.0 && num <= 100000.0 && match[1] !== lastCanvasMult) {
+                                    if (num >= 1.0 && num <= 100000.0 && num >= (window.__aviatorCurrentMult || 0.0) && match[1] !== lastCanvasMult) {
                                         lastCanvasMult = match[1];
                                         window.__aviatorCurrentMult = num;
                                         var isCanvasActive = num >= 1.10;
@@ -509,6 +509,12 @@ object ScriptInjector {
                         smoothedFrameDelta = smoothedFrameDelta * 0.92 + delta * 0.08;
                     }
 
+                    // Only evaluate animation stutters in windows hosting a game canvas or subframes
+                    if (window === window.top && !document.querySelector('canvas')) {
+                        requestAnimationFrame(frameAuditLoop);
+                        return;
+                    }
+
                     var curM = window.__aviatorCurrentMult || 0.0;
                     var flightActive = (window.__aviatorFlightActive || curM >= 1.20) && curM >= 1.20;
 
@@ -567,6 +573,8 @@ object ScriptInjector {
                         var elements = document.querySelectorAll('.stage-board, .payout, [class*="multiplier"], [class*="coefficient"], [class*="stage"], [class*="crash"], div, span');
                         for (var i = 0; i < elements.length; i++) {
                             var el = elements[i];
+                            // Exclude past round chips and bet history containers
+                            if (el.closest && el.closest('.history, .payouts, .user-bets, .all-bets, .stats')) continue;
                             if (el.children.length <= 1) {
                                 var txt = (el.innerText || el.textContent || "").trim();
                                 if (txt.length > 0 && txt.length < 25) {
@@ -592,7 +600,7 @@ object ScriptInjector {
                                         var mMatch = aviatorMultRegex.exec(txt);
                                         if (mMatch && mMatch[1]) {
                                             var mVal = parseFloat(mMatch[1]);
-                                            if (mVal >= 1.0 && mMatch[1] !== lastDomAviatorMult) {
+                                            if (mVal >= 1.0 && mVal >= (window.__aviatorCurrentMult || 0.0) && mMatch[1] !== lastDomAviatorMult) {
                                                 lastDomAviatorMult = mMatch[1];
                                                 window.__aviatorCurrentMult = mVal;
                                                 var isDomActive = mVal >= 1.10;
@@ -602,7 +610,6 @@ object ScriptInjector {
                                                         window.top.postMessage({ __aviatorSyncMult: mVal, __aviatorFlightActive: isDomActive }, '*');
                                                     }
                                                 } catch(e) {}
-                                                // Keep multiplier tracking internal to JS, no Android conflict
                                                 break;
                                             }
                                         }

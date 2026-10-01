@@ -228,6 +228,11 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                     binding.webView.evaluateJavascript("if (typeof window.__syncFlight === 'function') window.__syncFlight($mult, true);", null)
                 }
 
+                // If pre-crash alert banner is actively showing, keep its title live with zero lag
+                if (binding.bannerPreCrashAlert.visibility == View.VISIBLE) {
+                    binding.tvAlertTitle.text = "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(mult)
+                }
+
                 // Color adaptive shift
                 when {
                     viewModel.connectionStatus.value == "CRASH DETECTED" -> {
@@ -283,12 +288,13 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         // Real-Time Instant Pre-Crash Signal Alert (Zero-Lag BEFORE Crash)
         viewModel.preCrashAlert.observe(this) { alert ->
-            if (alert != null && alert.active && alert.multiplier >= 1.25) {
+            if (alert != null && alert.active && alert.multiplier >= 1.20) {
+                val liveM = maxOf(alert.multiplier, viewModel.currentMultiplier.value ?: 1.0)
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
                 binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
                 binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
 
-                val titleText = "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(alert.multiplier)
+                val titleText = "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(liveM)
                 val subText = "Crash animation hitch detected BEFORE crash • Tap Cash Out!"
 
                 binding.tvAlertTitle.text = titleText
@@ -298,7 +304,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
 
-                // Urgent double haptic vibration ONLY when multiplier >= 1.25x in active flight
+                // Urgent double haptic vibration ONLY when multiplier >= 1.20x in active flight
                 triggerImmediateVibration()
             } else {
                 binding.bannerPreCrashAlert.visibility = View.GONE
