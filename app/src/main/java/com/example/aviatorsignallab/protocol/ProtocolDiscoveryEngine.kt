@@ -216,15 +216,18 @@ class ProtocolDiscoveryEngine(
                 }
             }
             GameState.CRASH, GameState.ROUND_COMPLETE, GameState.NEXT_ROUND -> {
-                // If multiplier is active again, transition to next round
-                val nextRoundId = if (roundIdCandidate != null && isNewerRoundId(roundIdCandidate, currentRoundId)) {
-                    roundIdCandidate
-                } else {
-                    "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                // STRICT: A new round NEVER starts mid-flight (e.g. 5.69x, 5.11x, 2.03x)!
+                // Multipliers > 1.05 arriving after crash are post-round settlement noise (player cashout broadcasts).
+                if (newMultiplier <= 1.05) {
+                    val nextRoundId = if (roundIdCandidate != null && isNewerRoundId(roundIdCandidate, currentRoundId)) {
+                        roundIdCandidate
+                    } else {
+                        "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                    }
+                    transitionToStart(nextRoundId, timestamp)
+                    currentMultiplier = newMultiplier
+                    transitionToLive()
                 }
-                transitionToStart(nextRoundId, timestamp)
-                currentMultiplier = newMultiplier
-                transitionToLive()
             }
         }
     }
@@ -360,9 +363,13 @@ class ProtocolDiscoveryEngine(
             return null
         }
 
-        // For Spribe Aviator, live multipliers only arrive in cmd 85 (live ticks) or cmd 84 (crash)
+        // For Spribe Aviator, live multipliers ONLY arrive in cmd 85 (live ticks) or cmd 84 (sta 2 takeoff / sta 3 crash)
         val cmd = fields["cmd"] ?: ""
-        if (cmd.isNotBlank() && cmd != "85" && cmd != "84") {
+        if (cmd != "85" && cmd != "84") {
+            return null
+        }
+        if (cmd == "84" && (fields["sta"] == "4" || fields["sta"] == "1")) {
+            // sta 4 is settling (player cashout list), sta 1 is betting start - neither is an in-flight multiplier!
             return null
         }
 

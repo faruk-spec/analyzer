@@ -91,6 +91,9 @@ object ScriptInjector {
                         window.__aviatorCurrentMult = event.data.__aviatorSyncMult;
                         if (event.data.__aviatorFlightActive !== undefined) {
                             window.__aviatorFlightActive = event.data.__aviatorFlightActive;
+                            if (!event.data.__aviatorFlightActive) {
+                                window.__lastCrashTime = performance.now();
+                            }
                         }
                     }
                 } catch(e) {}
@@ -154,43 +157,58 @@ object ScriptInjector {
                 window.__aviatorWsHooked = true;
                 var NativeWebSocket = window.WebSocket;
 
+                function broadcastFlightSync(mult, active) {
+                    try {
+                        window.__aviatorCurrentMult = mult;
+                        window.__aviatorFlightActive = active;
+                        if (!active) {
+                            window.__lastCrashTime = performance.now();
+                        }
+                        var iframes = document.querySelectorAll('iframe');
+                        for (var i = 0; i < iframes.length; i++) {
+                            try {
+                                if (iframes[i].contentWindow) {
+                                    iframes[i].contentWindow.postMessage({ __aviatorSyncMult: mult, __aviatorFlightActive: active }, '*');
+                                }
+                            } catch(e) {}
+                        }
+                        if (window.top && window.top !== window) {
+                            window.top.postMessage({ __aviatorSyncMult: mult, __aviatorFlightActive: active }, '*');
+                        }
+                    } catch(e) {}
+                }
+
+                function inspectWsPayload(direction, str) {
+                    if (!str || typeof str !== 'string') return;
+                    if (direction === 'INCOMING') {
+                        var mulMatch = str.match(/"mul"\s*:\s*"?([0-9]+\.?[0-9]*)"?/);
+                        if (mulMatch && mulMatch[1]) {
+                            var mVal = parseFloat(mulMatch[1]);
+                            if (mVal >= 1.0) {
+                                var isActiveFlight = mVal >= 1.08;
+                                broadcastFlightSync(mVal, isActiveFlight);
+                            }
+                        }
+
+                        if (str.indexOf('"cmd":84') !== -1 || str.indexOf('"cmd":"84"') !== -1) {
+                            if (str.indexOf('"sta":1') !== -1 || str.indexOf('"sta":3') !== -1 || str.indexOf('"sta":4') !== -1 ||
+                                str.indexOf('"sta":"1"') !== -1 || str.indexOf('"sta":"3"') !== -1 || str.indexOf('"sta":"4"') !== -1) {
+                                broadcastFlightSync(0.0, false);
+                            } else if (str.indexOf('"sta":2') !== -1 || str.indexOf('"sta":"2"') !== -1) {
+                                broadcastFlightSync(1.0, true);
+                            }
+                        }
+                    }
+                }
+
                 function processWsMessage(direction, data) {
                     try {
                         if (typeof data === 'string') {
-                            // Track live flight multiplier from incoming packets
-                            // Track live flight multiplier & flight state from incoming packets
-                            var mulMatch = data.match(/"mul"\s*:\s*"?([0-9]+\.?[0-9]*)"?/);
-                            if (mulMatch && mulMatch[1]) {
-                                var mVal = parseFloat(mulMatch[1]);
-                                if (mVal >= 1.0) {
-                                    window.__aviatorCurrentMult = mVal;
-                                    var isActiveFlight = mVal >= 1.08;
-                                    window.__aviatorFlightActive = isActiveFlight;
-                                    try {
-                                        if (window.top && window.top !== window) {
-                                            window.top.postMessage({ __aviatorSyncMult: mVal, __aviatorFlightActive: isActiveFlight }, '*');
-                                        }
-                                    } catch(e) {}
-                                }
-                            }
-
-                            // Command 84: 1=waiting/betting, 2=flying, 3=crashed
-                            if (direction === 'INCOMING' && data.indexOf('"cmd":84') !== -1) {
-                                if (data.indexOf('"sta":1') !== -1 || data.indexOf('"sta":3') !== -1) {
-                                    window.__aviatorCurrentMult = 0.0;
-                                    window.__aviatorFlightActive = false;
-                                    try {
-                                        if (window.top && window.top !== window) {
-                                            window.top.postMessage({ __aviatorSyncMult: 0.0, __aviatorFlightActive: false }, '*');
-                                        }
-                                    } catch(e) {}
-                                } else if (data.indexOf('"sta":2') !== -1) {
-                                    window.__aviatorFlightActive = true;
-                                }
-                            }
+                            inspectWsPayload(direction, data);
                             safeDispatch("WEBSOCKET", direction, data, data.length);
                         } else if (data instanceof Blob) {
                             data.text().then(function(txt) {
+                                inspectWsPayload(direction, txt);
                                 safeDispatch("WEBSOCKET", direction, txt, txt.length);
                             }).catch(function() {
                                 var s = data.size || 0;
@@ -199,6 +217,7 @@ object ScriptInjector {
                         } else if (data instanceof ArrayBuffer) {
                             try {
                                 var txt = new TextDecoder("utf-8").decode(new Uint8Array(data));
+                                inspectWsPayload(direction, txt);
                                 safeDispatch("WEBSOCKET", direction, txt, txt.length);
                             } catch(e) {
                                 var s = data.byteLength || 0;
@@ -264,7 +283,9 @@ object ScriptInjector {
                             if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
                                 window.__aviatorCurrentMult = 0.0;
                                 window.__aviatorFlightActive = false;
+                                window.__lastCrashTime = performance.now();
                                 try {
+                                    if (typeof broadcastFlightSync === 'function') broadcastFlightSync(0.0, false);
                                     if (window.top && window.top !== window) {
                                         window.top.postMessage({ __aviatorSyncMult: 0.0, __aviatorFlightActive: false }, '*');
                                     }
@@ -391,62 +412,27 @@ object ScriptInjector {
                 };
             }
 
-            // 6. Real-time WinGo Live State Extractor (DOM & Screen Sync)
-            try {
-                var lastPeriod = "";
-                var lastTime = "";
-                var lastRoom = "";
-
-                function checkWingoDom() {
-                    try {
-                        var text = document.body ? document.body.innerText : "";
-                        if (!text || (text.indexOf("WinGo") === -1 && text.indexOf("wingo") === -1)) return;
-
-                        // 1. Detect active room tab (30sec, 1 Min, 3 Min, 5 Min)
-                        var activeRoom = "WinGo_30S";
-                        var tabs = document.querySelectorAll('.van-tab--active, .active, [class*="active"], [class*="select"]');
-                        for (var t = 0; t < tabs.length; t++) {
-                            var tabText = (tabs[t].innerText || "").toLowerCase();
-                            if (tabText.indexOf("30s") !== -1 || tabText.indexOf("30sec") !== -1) { activeRoom = "WinGo_30S"; break; }
-                            if (tabText.indexOf("3") !== -1 && tabText.indexOf("min") !== -1) { activeRoom = "WinGo_3M"; break; }
-                            if (tabText.indexOf("5") !== -1 && tabText.indexOf("min") !== -1) { activeRoom = "WinGo_5M"; break; }
-                            if (tabText.indexOf("1") !== -1 && tabText.indexOf("min") !== -1) { activeRoom = "WinGo_1M"; break; }
-                        }
-
-                        // 2. Detect 16-18 digit period ID (e.g. 20260929100052298)
-                        var periodMatch = text.match(/\b(202\d{13,15})\b/);
-                        var currentPeriod = periodMatch ? periodMatch[1] : "";
-
-                        // 3. Detect countdown time (e.g. 00:23 or 02:46 or 0 0 : 2 3)
-                        var timeMatch = text.match(/(\d{1,2})\s*:\s*(\d{2})/);
-                        var remainingSecs = 0;
-                        var timeStr = "";
-                        if (timeMatch) {
-                            var mins = parseInt(timeMatch[1], 10);
-                            var secs = parseInt(timeMatch[2], 10);
-                            remainingSecs = mins * 60 + secs;
-                            timeStr = (mins < 10 ? "0" + mins : "" + mins) + ":" + (secs < 10 ? "0" + secs : "" + secs);
-                        }
-
-                        if (currentPeriod && (currentPeriod !== lastPeriod || timeStr !== lastTime || activeRoom !== lastRoom)) {
-                            lastPeriod = currentPeriod;
-                            lastTime = timeStr;
-                            lastRoom = activeRoom;
-
-                            safeDispatch("WINGO_DOM", "INCOMING", JSON.stringify({
-                                type: "WINGO_DOM_SYNC",
-                                gameType: activeRoom,
-                                periodId: currentPeriod,
-                                timeText: timeStr,
-                                remainingSeconds: remainingSecs,
-                                isLocked: remainingSecs <= 5
-                            }), 50);
-                        }
-                    } catch(e) {}
-                }
-
-                setInterval(checkWingoDom, 400);
-            } catch(e) {}
+            // 6. Direct Android Bridge synchronization for flight state and multiplier
+            window.__syncFlight = function(mult, active) {
+                try {
+                    window.__aviatorCurrentMult = mult;
+                    window.__aviatorFlightActive = active;
+                    if (!active) {
+                        window.__lastCrashTime = performance.now();
+                    }
+                    var iframes = document.querySelectorAll('iframe');
+                    for (var i = 0; i < iframes.length; i++) {
+                        try {
+                            if (iframes[i].contentWindow) {
+                                iframes[i].contentWindow.postMessage({ __aviatorSyncMult: mult, __aviatorFlightActive: active }, '*');
+                            }
+                        } catch(e) {}
+                    }
+                    if (window.top && window.top !== window) {
+                        window.top.postMessage({ __aviatorSyncMult: mult, __aviatorFlightActive: active }, '*');
+                    }
+                } catch(e) {}
+            };
 
             // 7. Automated Bottom Banner & Security Modal Cleaner (Safe & Non-Destructive)
             // Removes ONLY the intrusive withdrawal warning overlay without touching game modals or iframes
@@ -525,6 +511,12 @@ object ScriptInjector {
                     // STRICT: Only evaluate stutters when the plane is actively flying and multiplier has started!
                     // Zero vibration before multiplier start, zero vibration during betting, countdown, or page load.
                     if (!flightActive) {
+                        requestAnimationFrame(frameAuditLoop);
+                        return;
+                    }
+
+                    // STRICT Post-Crash Lockout: NEVER evaluate or fire stutters within 3.5s of a crash!
+                    if (window.__lastCrashTime && (now - window.__lastCrashTime < 3500)) {
                         requestAnimationFrame(frameAuditLoop);
                         return;
                     }

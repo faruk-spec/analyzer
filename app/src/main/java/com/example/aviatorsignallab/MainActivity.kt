@@ -230,8 +230,11 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvMetricMultiplier.text = formatted
                 binding.tvBubbleMultiplier.text = formatted
 
-                if (mult >= 1.10) {
+                val isLiveFlight = viewModel.connectionStatus.value == "OBSERVING" || viewModel.connectionStatus.value == "ROUND START"
+                if (mult >= 1.10 && isLiveFlight) {
                     binding.webView.evaluateJavascript("if (typeof window.__syncFlight === 'function') window.__syncFlight($mult, true);", null)
+                } else if (!isLiveFlight) {
+                    binding.webView.evaluateJavascript("if (typeof window.__syncFlight === 'function') window.__syncFlight(0.0, false);", null)
                 }
 
                 // Color adaptive shift

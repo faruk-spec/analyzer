@@ -632,10 +632,25 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         // STRICT 1: Must be in active LIVE flight (NEVER after crash, NEVER during countdown/betting)
         if (protocolEngine.currentState != GameState.LIVE) return
 
+        // STRICT 1b: Active round status must explicitly be LIVE
+        if (protocolEngine.activeRound?.status != "LIVE") return
+
+        // STRICT 1c: Post-Crash Lockout: Must be at least 3500ms after last crash to prevent post-crash scene hitches from alerting
+        val now = System.currentTimeMillis()
+        if (protocolEngine.lastCrashTimestamp > 0 && (now - protocolEngine.lastCrashTimestamp < 3500L)) return
+
         val currentRound = protocolEngine.currentRoundId
         val currentMult = protocolEngine.currentMultiplier
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
         val liveMult = if (parsed >= 1.80) maxOf(parsed, currentMult) else currentMult
+
+        // STRICT 1d: Never alert on a multiplier lower than or equal to the previous crash multiplier if within 8s
+        if (protocolEngine.lastCrashTimestamp > 0 && (now - protocolEngine.lastCrashTimestamp < 8000L)) {
+            val lastCrashMult = protocolEngine.activeRound?.finalMultiplier ?: 0.0
+            if (lastCrashMult > 1.0 && liveMult <= lastCrashMult) {
+                return // Discard stale/lagged multiplier from previous round
+            }
+        }
 
         // STRICT 2: Check Target Filter Mode (>10x vs Standard >=1.80x)
         val is10x = _isTarget10xOnly.value == true
