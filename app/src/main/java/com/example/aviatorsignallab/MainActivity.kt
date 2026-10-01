@@ -172,6 +172,12 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             binding.tvConnectionStatus.text = status
             binding.tvBubbleStatus.text = status
 
+            // Dismiss pre-crash alert immediately when round crashes, starts, or pauses
+            if (status == "CRASH DETECTED" || status == "ROUND START" || status == "ROUND COMPLETE" || status == "STANDBY" || status == "PAUSED") {
+                binding.bannerPreCrashAlert.visibility = View.GONE
+                binding.webView.evaluateJavascript("if (typeof window.__syncFlight === 'function') window.__syncFlight(0.0, false);", null)
+            }
+
             if (status == "STANDBY" && (viewModel.currentMultiplier.value ?: 1.0) <= 1.0) {
                 binding.tvMetricMultiplier.text = "--"
                 binding.tvBubbleMultiplier.text = "--"

@@ -671,39 +671,27 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
      * Fires on the exact animation "blink / stutter" phenomenon immediately preceding the crash.
      */
     override fun onAnimationStutter(deltaMs: Double, multiplierStr: String) {
+        // STRICT 1: Must be in active LIVE flight (NEVER after crash, NEVER during countdown/betting)
+        if (protocolEngine.currentState != GameState.LIVE) return
+
         val currentRound = protocolEngine.currentRoundId
         val currentMult = protocolEngine.currentMultiplier
 
-        val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
-        // Real-time authoritative live multiplier: ALWAYS use the highest active multiplier reached
-        // Completely prevents any lag or showing an already-passed multiplier!
-        val mult = maxOf(currentMult, parsed)
-
-        // STRICT: Multiplier MUST have started and climbed past takeoff (>= 1.20x)
+        // STRICT 2: Multiplier MUST have started and climbed past takeoff (>= 1.25x)
         // Completely eliminates any vibration before multiplier start or during countdown/betting
-        if (mult < 1.20) return
+        if (currentMult < 1.25) return
 
-        // Dedup & High-Multiplier Escalation:
-        // Allows initial alert, AND allows high-tier escalation if round climbs higher (e.g. 5x, 10x, 20x)
+        // STRICT 3: Exactly ONE single alert per round. Eliminates multi-alert spam (no 4.62, 7.70, 12.24)!
         synchronized(this) {
-            val alreadyFired = fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()
-            val now = System.currentTimeMillis()
-            val isHighTierEscalation = alreadyFired &&
-                ((mult >= 4.0 && mult >= lastStutterAlertMult * 1.4) || (mult >= 10.0 && mult - lastStutterAlertMult >= 3.0)) &&
-                (now - lastStutterAlertTime > 2000L)
-
-            if (alreadyFired && !isHighTierEscalation) return
-
+            if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) return
             fastPathLastRoundId = currentRound
             fastPathCrashFiredForRound.set(true)
-            lastStutterAlertMult = mult
-            lastStutterAlertTime = now
             liveTickAnalyzer.markAlertFired()
         }
 
-        val finalMult = if (mult > 0.0) mult else currentMult
-        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, finalMult, "CRITICAL", "ANIMATION_MICRO_BLINK"))
-        onDiagnosticsReceived("[ANIMATION_MICRO_BLINK] ⚡ Micro-stutter caught BEFORE crash (${deltaMs.toInt()}ms drop @ ${"%.2f".format(finalMult)}x)")
+        // STRICT 4: Live authoritative flight multiplier for the alert (never past round values)
+        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, currentMult, "CRITICAL", "ANIMATION_MICRO_BLINK"))
+        onDiagnosticsReceived("[ANIMATION_MICRO_BLINK] ⚡ Single Cashout Alert @ ${"%.2f".format(currentMult)}x (${deltaMs.toInt()}ms drop)")
     }
 
     override fun onDiagnosticsReceived(message: String) {
