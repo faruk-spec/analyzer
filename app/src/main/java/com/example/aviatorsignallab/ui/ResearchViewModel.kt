@@ -482,32 +482,34 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         // 2. High-speed background CDN poller for official lottery results across all 4 rooms
         wingoCdnPollerJob = viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
-                try {
-                    val active = _activeWingoRoom.value ?: WingoProtocolEngine.WingoRoom.WINGO_30S
-                    val rooms = listOf(active) + WingoProtocolEngine.WingoRoom.values().filter { it != active }
+                if (_appMode.value == AppMode.WINGO) {
+                    try {
+                        val active = _activeWingoRoom.value ?: WingoProtocolEngine.WingoRoom.WINGO_30S
+                        val rooms = listOf(active) + WingoProtocolEngine.WingoRoom.values().filter { it != active }
 
-                    for (room in rooms) {
-                        try {
-                            val timestamp = System.currentTimeMillis()
-                            val url = "https://draw.ar-lottery06.com/WinGo/${room.roomCode}/GetHistoryIssuePage.json?_t=$timestamp"
-                            val req = okhttp3.Request.Builder()
-                                .url(url)
-                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
-                                .header("Cache-Control", "no-cache, no-store, must-revalidate")
-                                .header("Pragma", "no-cache")
-                                .header("Expires", "0")
-                                .build()
-                            val resp = httpClient.newCall(req).execute()
-                            val body = resp.body?.string()
-                            if (!body.isNullOrEmpty()) {
-                                wingoEngine.processPayload("CDN", url, body)
+                        for (room in rooms) {
+                            try {
+                                val timestamp = System.currentTimeMillis()
+                                val url = "https://draw.ar-lottery06.com/WinGo/${room.roomCode}/GetHistoryIssuePage.json?_t=$timestamp"
+                                val req = okhttp3.Request.Builder()
+                                    .url(url)
+                                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                                    .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                                    .header("Pragma", "no-cache")
+                                    .header("Expires", "0")
+                                    .build()
+                                val resp = httpClient.newCall(req).execute()
+                                val body = resp.body?.string()
+                                if (!body.isNullOrEmpty()) {
+                                    wingoEngine.processPayload("CDN", url, body)
+                                }
+                            } catch (e: Exception) {
+                                // Retry next cycle
                             }
-                        } catch (e: Exception) {
-                            // Retry next cycle
                         }
+                    } catch (e: Exception) {
+                        // Safe guard
                     }
-                } catch (e: Exception) {
-                    // Safe guard
                 }
                 delay(2500L)
             }
@@ -680,17 +682,32 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val currentRound = protocolEngine.currentRoundId
         val currentMult = protocolEngine.currentMultiplier
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
-        val liveMult = if (parsed >= 1.25) maxOf(parsed, currentMult) else currentMult
+        val liveMult = if (parsed >= 1.80) maxOf(parsed, currentMult) else currentMult
 
-        // STRICT 2: Multiplier MUST have started and climbed past takeoff (>= 1.25x)
-        // Completely eliminates any vibration before multiplier start or during countdown/betting
-        if (liveMult < 1.25) return
+        // STRICT 2: Multiplier MUST have climbed past initial takeoff (>= 1.80x)
+        // Completely eliminates premature false early alerts during takeoff transitions
+        if (liveMult < 1.80) return
 
-        // STRICT 3: Exactly ONE single alert per round. Eliminates multi-alert spam (no 4.62, 7.70, 12.24)!
+        val now = System.currentTimeMillis()
+
+        // STRICT 3: Smart Tier Escalation
+        // Prevents multi-alert spam on consecutive ticks, but allows alerting if flight climbs to higher tiers (e.g. 2.2x -> 5.5x -> 12.0x)
         synchronized(this) {
-            if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) return
-            fastPathLastRoundId = currentRound
+            if (fastPathLastRoundId == currentRound) {
+                // If an alert already fired this round, only allow another alert if multiplier has climbed significantly (>= 1.8x) and 2.5s have elapsed
+                if (fastPathCrashFiredForRound.get()) {
+                    if (liveMult < lastStutterAlertMult * 1.80 || (now - lastStutterAlertTime < 2500)) {
+                        return
+                    }
+                }
+            } else {
+                fastPathLastRoundId = currentRound
+                fastPathCrashFiredForRound.set(false)
+            }
+
             fastPathCrashFiredForRound.set(true)
+            lastStutterAlertMult = liveMult
+            lastStutterAlertTime = now
             liveTickAnalyzer.markAlertFired()
         }
 
@@ -699,7 +716,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
         // STRICT 4: Live authoritative flight multiplier for the alert (never past round values)
         _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, liveMult, "CRITICAL", "ANIMATION_MICRO_BLINK"))
-        onDiagnosticsReceived("[ANIMATION_MICRO_BLINK] ⚡ Single Cashout Alert @ ${"%.2f".format(liveMult)}x (${deltaMs.toInt()}ms drop)")
+        onDiagnosticsReceived("[ANIMATION_MICRO_BLINK] ⚡ Cashout Alert @ ${"%.2f".format(liveMult)}x (${deltaMs.toInt()}ms drop)")
     }
 
     override fun onDiagnosticsReceived(message: String) {

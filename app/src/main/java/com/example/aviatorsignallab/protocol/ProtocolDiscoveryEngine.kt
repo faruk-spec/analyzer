@@ -209,13 +209,10 @@ class ProtocolDiscoveryEngine(
                     transitionToStart(nextRoundId, timestamp)
                     currentMultiplier = newMultiplier
                     transitionToLive()
-                } else if (newMultiplier >= currentMultiplier) {
-                    // Strictly monotonic forward progress: prevents old/history multipliers from jumping backwards or conflicting
-                    val maxAllowedJump = if (currentMultiplier < 3.0) 2.5 else currentMultiplier * 1.5
-                    if (newMultiplier - currentMultiplier <= maxAllowedJump || currentMultiplier <= 1.01) {
-                        currentMultiplier = newMultiplier
-                        listener?.onStateChanged(currentState, currentState, currentRoundId, currentMultiplier)
-                    }
+                } else if (newMultiplier >= currentMultiplier && newMultiplier <= 100000.0) {
+                    // Strictly monotonic forward progress: allows all legitimate forward climb
+                    currentMultiplier = newMultiplier
+                    listener?.onStateChanged(currentState, currentState, currentRoundId, currentMultiplier)
                 }
             }
             GameState.CRASH, GameState.ROUND_COMPLETE, GameState.NEXT_ROUND -> {

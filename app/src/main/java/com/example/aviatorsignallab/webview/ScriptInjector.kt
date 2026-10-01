@@ -520,7 +520,7 @@ object ScriptInjector {
                     }
 
                     var curM = window.__aviatorCurrentMult || 0.0;
-                    var flightActive = window.__aviatorFlightActive && curM >= 1.25;
+                    var flightActive = window.__aviatorFlightActive && curM >= 1.80;
 
                     // STRICT: Only evaluate stutters when the plane is actively flying and multiplier has started!
                     // Zero vibration before multiplier start, zero vibration during betting, countdown, or page load.
