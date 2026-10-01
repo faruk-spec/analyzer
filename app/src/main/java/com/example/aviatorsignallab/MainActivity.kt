@@ -291,16 +291,25 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         viewModel.preCrashAlert.observe(this) { alert ->
             if (alert != null && alert.active && alert.multiplier >= 1.80) {
                 val liveM = maxOf(alert.multiplier, viewModel.currentMultiplier.value ?: 1.0)
+                val is10x = viewModel.isTarget10xOnly.value == true
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
                 binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
                 binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
 
-                val titleText = "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(liveM)
-                val subText = "Crash animation hitch detected BEFORE crash • Tap Cash Out!"
+                val titleText = if (is10x) {
+                    "🎯 TARGET >10x CASHOUT SIGNAL @ %.2fx".format(liveM)
+                } else {
+                    "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(liveM)
+                }
+                val subText = if (is10x) {
+                    "High-Value Pre-Crash Anomaly Detected at %.2fx • Cash Out Now!".format(liveM)
+                } else {
+                    "Crash animation hitch detected BEFORE crash • Tap Cash Out!"
+                }
 
                 binding.tvAlertTitle.text = titleText
                 binding.tvAlertSubtitle.text = subText
-                binding.tvBubbleStatus.text = "⚡CASH OUT"
+                binding.tvBubbleStatus.text = if (is10x) "🎯CASH OUT" else "⚡CASH OUT"
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
@@ -344,31 +353,24 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             }
         }
 
-        // App Mode Switcher Observer
-        viewModel.appMode.observe(this) { mode ->
-            if (mode == ResearchViewModel.AppMode.WINGO) {
-                binding.btnModeWingo.setBackgroundResource(R.drawable.bg_toggle_selected)
-                binding.btnModeWingo.setTextColor(Color.WHITE)
-                binding.btnModeAviator.setBackgroundResource(0)
-                binding.btnModeAviator.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-
-                binding.layoutTopPrediction.visibility = View.VISIBLE
-                binding.wingoTopHudStrip.visibility = View.VISIBLE
-                binding.metricsStrip.visibility = View.GONE
-
-                binding.bottomSheetResearch.btnSheetTabWingo.performClick()
+        // Target Mode Selector Observer (>10x vs Standard)
+        viewModel.isTarget10xOnly.observe(this) { is10x ->
+            val sel = R.drawable.bg_toggle_selected
+            val unselColor = ContextCompat.getColor(this, R.color.text_secondary)
+            if (is10x) {
+                binding.btnTarget10x.setBackgroundResource(sel)
+                binding.btnTarget10x.setTextColor(Color.WHITE)
+                binding.btnTargetStandard.setBackgroundResource(0)
+                binding.btnTargetStandard.setTextColor(unselColor)
             } else {
-                binding.btnModeAviator.setBackgroundResource(R.drawable.bg_toggle_selected)
-                binding.btnModeAviator.setTextColor(Color.WHITE)
-                binding.btnModeWingo.setBackgroundResource(0)
-                binding.btnModeWingo.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-
-                binding.layoutTopPrediction.visibility = View.GONE
-                binding.metricsStrip.visibility = View.VISIBLE
-                binding.wingoTopHudStrip.visibility = View.GONE
-
-                binding.bottomSheetResearch.btnSheetTabAviator.performClick()
+                binding.btnTargetStandard.setBackgroundResource(sel)
+                binding.btnTargetStandard.setTextColor(Color.WHITE)
+                binding.btnTarget10x.setBackgroundResource(0)
+                binding.btnTarget10x.setTextColor(unselColor)
             }
+            binding.metricsStrip.visibility = View.VISIBLE
+            binding.wingoTopHudStrip.visibility = View.GONE
+            binding.layoutTopPrediction.visibility = View.GONE
         }
 
         // Active WinGo Room Observer
@@ -619,17 +621,15 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
     private fun setupListeners() {
         val sheet = binding.bottomSheetResearch
 
-        binding.btnModeAviator.setOnClickListener {
-            viewModel.setAppMode(ResearchViewModel.AppMode.AVIATOR)
+        // Target Mode Segmented Switch Listeners
+        binding.btnTargetStandard.setOnClickListener {
+            viewModel.setTarget10xMode(false)
+            Toast.makeText(this, "⚡ Mode: Standard (All Flights >= 1.80x)", Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnModeWingo.setOnClickListener {
-            viewModel.setAppMode(ResearchViewModel.AppMode.WINGO)
-        }
-
-        binding.layoutTopPrediction.setOnClickListener {
-            bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
-            sheet.btnSheetTabWingo.performClick()
+        binding.btnTarget10x.setOnClickListener {
+            viewModel.setTarget10xMode(true)
+            Toast.makeText(this, "🎯 Mode: Sniper (>10x High-Multiplier Only)", Toast.LENGTH_SHORT).show()
         }
 
         sheet.btnSheetTabWingo.setOnClickListener {

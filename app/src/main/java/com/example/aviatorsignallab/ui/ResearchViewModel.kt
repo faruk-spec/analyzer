@@ -166,14 +166,23 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     val recentDisassembledPackets: LiveData<List<ServerReverseEngine.DisassembledPacket>> = _recentDisassembledPackets
     private val packetDisassemblyBuffer = mutableListOf<ServerReverseEngine.DisassembledPacket>()
 
-    // App Mode Toggle: AVIATOR vs WINGO
+    // App Mode Toggle: AVIATOR vs WINGO (Default to AVIATOR)
     enum class AppMode { AVIATOR, WINGO }
 
-    private val _appMode = MutableLiveData(AppMode.WINGO)
+    private val _appMode = MutableLiveData(AppMode.AVIATOR)
     val appMode: LiveData<AppMode> = _appMode
 
     fun setAppMode(mode: AppMode) {
         _appMode.postValue(mode)
+    }
+
+    // Target Multiplier Mode: Standard (All flights >= 1.80x) vs Sniper (>10x Only)
+    private val _isTarget10xOnly = MutableLiveData(false)
+    val isTarget10xOnly: LiveData<Boolean> = _isTarget10xOnly
+
+    fun setTarget10xMode(enabled: Boolean) {
+        _isTarget10xOnly.postValue(enabled)
+        onDiagnosticsReceived(if (enabled) "🎯 Target Mode: >10x (High-Multiplier Sniper Alert Armed)" else "⚡ Target Mode: Standard (All Flights >= 1.80x)")
     }
 
     // WinGo / BigSmall Lottery Protocol Engine & LiveData
@@ -452,68 +461,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         loadInitialStats()
         startTicker()
         startRiskMonitor()
-        startWingoEngine()
+        // WinGo engine completely deactivated to eliminate background network and CPU load
+        // startWingoEngine()
     }
 
     private fun startWingoEngine() {
-        // 1. High-precision UTC second-by-second countdown ticker for all 4 rooms
-        wingoTickerJob = viewModelScope.launch(Dispatchers.Default) {
-            while (isActive) {
-                try {
-                    val nowUtc = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
-                    val dateStr = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd").format(nowUtc)
-                    val totalSeconds = nowUtc.hour * 3600 + nowUtc.minute * 60 + nowUtc.second
-
-                    for (room in WingoProtocolEngine.WingoRoom.values()) {
-                        val cycle = room.cycleSeconds
-                        val seq = (totalSeconds / cycle) + 1
-                        val remaining = cycle - (totalSeconds % cycle)
-                        val isLocked = remaining <= 5
-                        val periodId = "$dateStr${room.idPattern}" + String.format(java.util.Locale.US, "%04d", seq)
-                        wingoEngine.updateRoomIssue(room, periodId, remaining, isLocked)
-                    }
-                } catch (e: Exception) {
-                    // Safety guard
-                }
-                delay(1000L)
-            }
-        }
-
-        // 2. High-speed background CDN poller for official lottery results across all 4 rooms
-        wingoCdnPollerJob = viewModelScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                if (_appMode.value == AppMode.WINGO) {
-                    try {
-                        val active = _activeWingoRoom.value ?: WingoProtocolEngine.WingoRoom.WINGO_30S
-                        val rooms = listOf(active) + WingoProtocolEngine.WingoRoom.values().filter { it != active }
-
-                        for (room in rooms) {
-                            try {
-                                val timestamp = System.currentTimeMillis()
-                                val url = "https://draw.ar-lottery06.com/WinGo/${room.roomCode}/GetHistoryIssuePage.json?_t=$timestamp"
-                                val req = okhttp3.Request.Builder()
-                                    .url(url)
-                                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
-                                    .header("Cache-Control", "no-cache, no-store, must-revalidate")
-                                    .header("Pragma", "no-cache")
-                                    .header("Expires", "0")
-                                    .build()
-                                val resp = httpClient.newCall(req).execute()
-                                val body = resp.body?.string()
-                                if (!body.isNullOrEmpty()) {
-                                    wingoEngine.processPayload("CDN", url, body)
-                                }
-                            } catch (e: Exception) {
-                                // Retry next cycle
-                            }
-                        }
-                    } catch (e: Exception) {
-                        // Safe guard
-                    }
-                }
-                delay(2500L)
-            }
-        }
+        // Deactivated completely - zero background polling
     }
 
     private fun loadInitialStats() {
@@ -684,27 +637,20 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
         val liveMult = if (parsed >= 1.80) maxOf(parsed, currentMult) else currentMult
 
-        // STRICT 2: Multiplier MUST have climbed past initial takeoff (>= 1.80x)
-        // Completely eliminates premature false early alerts during takeoff transitions
-        if (liveMult < 1.80) return
+        // STRICT 2: Check Target Filter Mode (>10x vs Standard >=1.80x)
+        val is10x = _isTarget10xOnly.value == true
+        val minThreshold = if (is10x) 10.0 else 1.80
+        if (liveMult < minThreshold) return
 
         val now = System.currentTimeMillis()
 
-        // STRICT 3: Smart Tier Escalation
-        // Prevents multi-alert spam on consecutive ticks, but allows alerting if flight climbs to higher tiers (e.g. 2.2x -> 5.5x -> 12.0x)
+        // STRICT 3: Strictly ONE single alert per round!
+        // Completely eliminates multiple alert spam on high multipliers (e.g. 248x round)
         synchronized(this) {
-            if (fastPathLastRoundId == currentRound) {
-                // If an alert already fired this round, only allow another alert if multiplier has climbed significantly (>= 1.8x) and 2.5s have elapsed
-                if (fastPathCrashFiredForRound.get()) {
-                    if (liveMult < lastStutterAlertMult * 1.80 || (now - lastStutterAlertTime < 2500)) {
-                        return
-                    }
-                }
-            } else {
-                fastPathLastRoundId = currentRound
-                fastPathCrashFiredForRound.set(false)
+            if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) {
+                return
             }
-
+            fastPathLastRoundId = currentRound
             fastPathCrashFiredForRound.set(true)
             lastStutterAlertMult = liveMult
             lastStutterAlertTime = now
@@ -715,8 +661,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _currentMultiplier.postValue(liveMult)
 
         // STRICT 4: Live authoritative flight multiplier for the alert (never past round values)
-        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, liveMult, "CRITICAL", "ANIMATION_MICRO_BLINK"))
-        onDiagnosticsReceived("[ANIMATION_MICRO_BLINK] ⚡ Cashout Alert @ ${"%.2f".format(liveMult)}x (${deltaMs.toInt()}ms drop)")
+        val alertType = if (is10x) "TARGET_10X_SNIPER" else "ANIMATION_MICRO_BLINK"
+        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, liveMult, "CRITICAL", alertType))
+        onDiagnosticsReceived("[$alertType] ⚡ Cashout Alert @ ${"%.2f".format(liveMult)}x (${deltaMs.toInt()}ms drop)")
     }
 
     override fun onDiagnosticsReceived(message: String) {
@@ -851,13 +798,17 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         if (reason.startsWith("FLEW_AWAY")) return
         if (protocolEngine.currentState != GameState.LIVE || currentMultiplier < 1.25) return
 
+        val is10x = _isTarget10xOnly.value == true
+        if (is10x && currentMultiplier < 10.0) return
+
         // STRICT: Only one alert per round across all subsystems
         if (fastPathCrashFiredForRound.get()) return
         fastPathCrashFiredForRound.set(true)
         fastPathLastRoundId = roundId
 
-        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, confidence, reason))
-        onDiagnosticsReceived("[PRE_CRASH_SIGNAL] ⚡ Pre-crash signal alert at ${currentMultiplier}x ($reason)")
+        val alertReason = if (is10x) "TARGET_10X_PRE_CRASH" else reason
+        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, confidence, alertReason))
+        onDiagnosticsReceived("[PRE_CRASH_SIGNAL] ⚡ Pre-crash signal alert at ${currentMultiplier}x ($alertReason)")
     }
 
     override fun onPreCrashAlertCleared() {
@@ -869,6 +820,13 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
         // Clear any pre-crash alert immediately upon crash so no delayed/post-crash alert stays or re-fires!
         _preCrashAlert.postValue(null)
+
+        synchronized(this) {
+            fastPathCrashFiredForRound.set(false)
+            fastPathLastRoundId = ""
+            lastStutterAlertMult = 0.0
+            lastStutterAlertTime = 0L
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             try {

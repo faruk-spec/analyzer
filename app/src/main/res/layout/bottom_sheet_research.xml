@@ -40,23 +40,18 @@
             <TextView
                 android:id="@+id/btnSheetTabWingo"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@drawable/bg_toggle_selected"
-                android:gravity="center"
-                android:text="@string/label_tab_wingo"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                android:layout_height="0dp"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/btnSheetTabAviator"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
+                android:background="@drawable/bg_toggle_selected"
                 android:gravity="center"
                 android:text="@string/label_tab_aviator"
-                android:textColor="@color/text_secondary"
+                android:textColor="#FFFFFF"
                 android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -109,7 +104,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:visibility="visible">
+                android:visibility="gone">
 
                 <!-- Room Selector Tabs -->
                 <LinearLayout
@@ -884,7 +879,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:visibility="gone">
+                android:visibility="visible">
 
                 <!-- Activity Signal Card -->
                 <LinearLayout
