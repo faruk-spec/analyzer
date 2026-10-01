@@ -224,6 +224,10 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvMetricMultiplier.text = formatted
                 binding.tvBubbleMultiplier.text = formatted
 
+                if (mult >= 1.10) {
+                    binding.webView.evaluateJavascript("if (typeof window.__syncFlight === 'function') window.__syncFlight($mult, true);", null)
+                }
+
                 // Color adaptive shift
                 when {
                     viewModel.connectionStatus.value == "CRASH DETECTED" -> {
@@ -243,6 +247,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvMetricMultiplier.text = "--"
                 binding.tvBubbleMultiplier.text = "--"
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+                binding.webView.evaluateJavascript("if (typeof window.__syncFlight === 'function') window.__syncFlight(0.0, false);", null)
             }
         }
 

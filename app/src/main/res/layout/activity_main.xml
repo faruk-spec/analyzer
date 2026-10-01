@@ -386,262 +386,111 @@
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- Real-Time Aviator Metrics Strip (Collapsible via Bubble Mode) -->
-        <HorizontalScrollView
+        <!-- Real-Time Aviator Metrics Strip (Clean & Focused: Multiplier + Round only) -->
+        <LinearLayout
             android:id="@+id/metricsStrip"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#0F1626"
-            android:scrollbars="none"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="5dp"
             android:visibility="gone">
 
+            <!-- Hero Multiplier Display -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_metric_chip"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="12dp"
-                android:paddingTop="6dp"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
                 android:paddingEnd="12dp"
-                android:paddingBottom="6dp">
+                android:paddingBottom="4dp">
 
-                <!-- Hero Multiplier Display -->
-                <LinearLayout
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="10dp"
-                    android:background="@drawable/bg_metric_chip"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:layout_marginEnd="6dp"
+                    android:text="MULT"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:text="MULT"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvMetricMultiplier"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-black"
-                        android:text="--"
-                        android:textColor="@color/accent_cyan"
-                        android:textSize="16sp" />
-                </LinearLayout>
-
-                <!-- Current Round Chip (Click to copy) -->
-                <LinearLayout
-                    android:id="@+id/chipCurRound"
+                <TextView
+                    android:id="@+id/tvMetricMultiplier"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="10dp"
-                    android:background="@drawable/bg_metric_chip"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:text="ROUND"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvMetricCurRound"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="monospace"
-                        android:text="--"
-                        android:textColor="@color/accent_purple"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- Metric: Real-Time Survival Probability -->
-                <LinearLayout
-                    android:id="@+id/chipSurvivalProb"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="10dp"
-                    android:background="@drawable/bg_metric_chip"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:text="PROB"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvMetricProb"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-black"
-                        android:text="--%"
-                        android:textColor="@color/accent_emerald"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- Metric: Target Multiplier Selector (Clickable) -->
-                <LinearLayout
-                    android:id="@+id/chipTargetSelector"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="10dp"
-                    android:background="@drawable/bg_metric_chip"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:text="TARGET"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvMetricTarget"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-bold"
-                        android:text="2.00x (75%)"
-                        android:textColor="@color/accent_cyan"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- Metric: Events -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="10dp"
-                    android:background="@drawable/bg_metric_chip"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:text="EVT"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvMetricEvents"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="monospace"
-                        android:text="0"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- Metric: Rounds Recorded -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="10dp"
-                    android:background="@drawable/bg_metric_chip"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:text="ROUNDS"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvMetricRounds"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="monospace"
-                        android:text="0"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- Metric: Elapsed -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="10dp"
-                    android:background="@drawable/bg_metric_chip"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:text="TIME"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvMetricElapsed"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="monospace"
-                        android:text="0.0s"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- Metric: Rate -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_metric_chip"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:text="RATE"
-                        android:textColor="@color/text_muted"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvMetricEventRate"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="monospace"
-                        android:text="0 evt/s"
-                        android:textColor="@color/accent_emerald"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
+                    android:fontFamily="sans-serif-black"
+                    android:text="--"
+                    android:textColor="@color/accent_cyan"
+                    android:textSize="16sp" />
             </LinearLayout>
-        </HorizontalScrollView>
+
+            <!-- Current Round Chip (Click to copy) -->
+            <LinearLayout
+                android:id="@+id/chipCurRound"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_metric_chip"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:text="ROUND"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvMetricCurRound"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="--"
+                    android:textColor="@color/accent_purple"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Hidden Unwanted Metrics (Preserved with visibility="gone" for ViewBinding compatibility) -->
+            <LinearLayout
+                android:id="@+id/chipSurvivalProb"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone">
+                <TextView android:id="@+id/tvMetricProb" android:layout_width="0dp" android:layout_height="0dp" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/chipTargetSelector"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone">
+                <TextView android:id="@+id/tvMetricTarget" android:layout_width="0dp" android:layout_height="0dp" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone">
+                <TextView android:id="@+id/tvMetricEvents" android:layout_width="0dp" android:layout_height="0dp" />
+                <TextView android:id="@+id/tvMetricRounds" android:layout_width="0dp" android:layout_height="0dp" />
+                <TextView android:id="@+id/tvMetricElapsed" android:layout_width="0dp" android:layout_height="0dp" />
+                <TextView android:id="@+id/tvMetricEventRate" android:layout_width="0dp" android:layout_height="0dp" />
+            </LinearLayout>
+
+        </LinearLayout>
 
         <!-- Web Loading Progress -->
         <ProgressBar

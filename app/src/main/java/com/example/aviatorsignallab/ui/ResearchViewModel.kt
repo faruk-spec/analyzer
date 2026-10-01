@@ -415,6 +415,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     // processes the same crash packet that the fast-path already handled.
     private val fastPathCrashFiredForRound = AtomicBoolean(false)
     private var fastPathLastRoundId: String = ""
+    private var lastStutterAlertMult: Double = 0.0
+    private var lastStutterAlertTime: Long = 0L
 
     // Stage 1 Prepare Alert guard: tracks if advisory alert fired for current round
     private val prepareAlertFiredForRound = AtomicBoolean(false)
@@ -669,24 +671,31 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
      * Fires on the exact animation "blink / stutter" phenomenon immediately preceding the crash.
      */
     override fun onAnimationStutter(deltaMs: Double, multiplierStr: String) {
-        // STRICT 1: Must be in active LIVE flight (never before multiplier start or during betting)
-        if (protocolEngine.currentState != GameState.LIVE) return
-
         val currentRound = protocolEngine.currentRoundId
         val currentMult = protocolEngine.currentMultiplier
 
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
         val mult = if (parsed >= 1.10) parsed else currentMult
 
-        // STRICT 2: Multiplier MUST have started and climbed past takeoff (>= 1.25x)
+        // STRICT: Multiplier MUST have started and climbed past takeoff (>= 1.20x)
         // Completely eliminates any vibration before multiplier start or during countdown/betting
-        if (currentMult < 1.25 || mult < 1.25) return
+        if (mult < 1.20 && currentMult < 1.20) return
 
-        // Dedup: single pre-crash alert per round
+        // Dedup & High-Multiplier Escalation:
+        // Allows initial alert, AND allows high-tier escalation if round climbs higher (e.g. 5x, 10x, 20x)
         synchronized(this) {
-            if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) return
+            val alreadyFired = fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()
+            val now = System.currentTimeMillis()
+            val isHighTierEscalation = alreadyFired &&
+                ((mult >= 4.0 && mult >= lastStutterAlertMult * 1.4) || (mult >= 10.0 && mult - lastStutterAlertMult >= 3.0)) &&
+                (now - lastStutterAlertTime > 2000L)
+
+            if (alreadyFired && !isHighTierEscalation) return
+
             fastPathLastRoundId = currentRound
             fastPathCrashFiredForRound.set(true)
+            lastStutterAlertMult = mult
+            lastStutterAlertTime = now
             liveTickAnalyzer.markAlertFired()
         }
 
@@ -808,6 +817,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         prepareAlertFiredForRound.set(false)
         fastPathCrashFiredForRound.set(false)
         fastPathLastRoundId = roundId
+        lastStutterAlertMult = 0.0
+        lastStutterAlertTime = 0L
 
         // Reset live tick cadence analyzer for new round
         liveTickAnalyzer.onNewRound(roundId)

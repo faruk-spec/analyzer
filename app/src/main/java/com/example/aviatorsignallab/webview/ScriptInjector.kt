@@ -275,6 +275,22 @@ object ScriptInjector {
                                         rawText: trimmed
                                     }), trimmed.length);
                                 }
+                            } else {
+                                var match = strictCanvasMultRegex.exec(trimmed);
+                                if (match && match[1]) {
+                                    var num = parseFloat(match[1]);
+                                    if (num >= 1.0 && num <= 100000.0 && match[1] !== lastCanvasMult) {
+                                        lastCanvasMult = match[1];
+                                        window.__aviatorCurrentMult = num;
+                                        var isCanvasActive = num >= 1.10;
+                                        window.__aviatorFlightActive = isCanvasActive;
+                                        try {
+                                            if (window.top && window.top !== window) {
+                                                window.top.postMessage({ __aviatorSyncMult: num, __aviatorFlightActive: isCanvasActive }, '*');
+                                            }
+                                        } catch(e) {}
+                                    }
+                                }
                             }
                         }
                     } catch(e) {}
@@ -465,6 +481,17 @@ object ScriptInjector {
                 setInterval(cleanBannersAndModals, 600);
             } catch(e) {}
 
+            // Direct Android Bridge synchronization for flight state and multiplier
+            window.__syncFlight = function(mult, active) {
+                try {
+                    window.__aviatorCurrentMult = mult;
+                    window.__aviatorFlightActive = active;
+                    if (window.top && window.top !== window) {
+                        window.top.postMessage({ __aviatorSyncMult: mult, __aviatorFlightActive: active }, '*');
+                    }
+                } catch(e) {}
+            };
+
             // 8. Adaptive Animation Micro-Blink & Render Hitch Detector (Fires BEFORE Crash)
             // Monitors requestAnimationFrame frame deltas against dynamic device refresh rate (60Hz, 90Hz, 120Hz).
             // A micro-stutter / dropped frame during flight precedes the crash animation sequence.
@@ -483,7 +510,7 @@ object ScriptInjector {
                     }
 
                     var curM = window.__aviatorCurrentMult || 0.0;
-                    var flightActive = window.__aviatorFlightActive && curM >= 1.25;
+                    var flightActive = (window.__aviatorFlightActive || curM >= 1.20) && curM >= 1.20;
 
                     // STRICT: Only evaluate stutters when the plane is actively flying and multiplier has started!
                     // Zero vibration before multiplier start, zero vibration during betting, countdown, or page load.
@@ -492,13 +519,21 @@ object ScriptInjector {
                         return;
                     }
 
-                    // Adaptive spike calculation:
-                    // For high multiplier (>6.0x), even a single dropped frame produces a glaring visual blink:
-                    var spikeRatio = curM >= 6.0 ? 1.40 : 1.55;
-                    var minAbsolute = curM >= 6.0 ? 18.0 : 22.0;
+                    // Adaptive multi-tier spike calculation:
+                    // As multiplier climbs, plane curve velocity accelerates dramatically.
+                    // At >10x and >5x, render hitches produce noticeable visual frame blinks.
+                    var spikeRatio = 1.55;
+                    var minAbsolute = 22.0;
+                    if (curM >= 10.0) {
+                        spikeRatio = 1.30;
+                        minAbsolute = 18.0;
+                    } else if (curM >= 5.0) {
+                        spikeRatio = 1.40;
+                        minAbsolute = 20.0;
+                    }
                     var stutterThreshold = Math.max(minAbsolute, smoothedFrameDelta * spikeRatio);
 
-                    if (delta >= stutterThreshold && (now - lastStutterAlertTime > 2200)) {
+                    if (delta >= stutterThreshold && (now - lastStutterAlertTime > 1800)) {
                         lastStutterAlertTime = now;
                         safeLog("[ANIMATION_MICRO_BLINK] Frame drop: " + delta.toFixed(1) + "ms (baseline=" + smoothedFrameDelta.toFixed(1) + "ms, mult=" + curM.toFixed(2) + "x)");
 
@@ -521,14 +556,15 @@ object ScriptInjector {
                 requestAnimationFrame(frameAuditLoop);
             } catch(e) {}
 
-            // 9. Real-Time Aviator HTML DOM Crash Scanner (Ultra-Fast 150ms sync)
-            // Monitors DOM strictly for "FLEW AWAY!" / "CRASHED" state transitions without scraping multipliers
+            // 9. Real-Time Aviator HTML DOM Multiplier & Crash Scanner (Ultra-Fast 120ms sync)
             try {
                 var lastDomCrashState = "";
+                var lastDomAviatorMult = "";
+                var aviatorMultRegex = /^\s*([0-9]{1,4}\.[0-9]{2})\s*[xX]\s*$/;
 
                 function checkAviatorDom() {
                     try {
-                        var elements = document.querySelectorAll('.stage-board, [class*="stage"], [class*="crash"], div, span');
+                        var elements = document.querySelectorAll('.stage-board, .payout, [class*="multiplier"], [class*="coefficient"], [class*="stage"], [class*="crash"], div, span');
                         for (var i = 0; i < elements.length; i++) {
                             var el = elements[i];
                             if (el.children.length <= 1) {
@@ -552,13 +588,31 @@ object ScriptInjector {
                                             }), txt.length);
                                         }
                                         break;
+                                    } else {
+                                        var mMatch = aviatorMultRegex.exec(txt);
+                                        if (mMatch && mMatch[1]) {
+                                            var mVal = parseFloat(mMatch[1]);
+                                            if (mVal >= 1.0 && mMatch[1] !== lastDomAviatorMult) {
+                                                lastDomAviatorMult = mMatch[1];
+                                                window.__aviatorCurrentMult = mVal;
+                                                var isDomActive = mVal >= 1.10;
+                                                window.__aviatorFlightActive = isDomActive;
+                                                try {
+                                                    if (window.top && window.top !== window) {
+                                                        window.top.postMessage({ __aviatorSyncMult: mVal, __aviatorFlightActive: isDomActive }, '*');
+                                                    }
+                                                } catch(e) {}
+                                                // Keep multiplier tracking internal to JS, no Android conflict
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     } catch(e) {}
                 }
-                setInterval(checkAviatorDom, 150);
+                setInterval(checkAviatorDom, 120);
             } catch(e) {}
 
         })();
