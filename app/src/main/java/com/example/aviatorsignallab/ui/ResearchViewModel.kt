@@ -53,6 +53,21 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     val webhookSyncManager = com.example.aviatorsignallab.sync.WebhookSyncManager(application)
     val liveTickAnalyzer = LiveTickCadenceAnalyzer()
 
+    // Alert source settings (persisted so a toggle survives app restarts)
+    private val alertPrefs by lazy { application.getSharedPreferences("alert_settings_prefs", android.content.Context.MODE_PRIVATE) }
+
+    // CADENCE source: WebSocket tick-freeze detector. Independent of the animation-stutter
+    // detector and fires earlier (protocol-level, not render-level), but is newer/less field-tested,
+    // so it ships with a user-visible off switch in case real-world traffic proves it too twitchy.
+    private val _cadenceAlertEnabled = MutableLiveData(alertPrefs.getBoolean("cadence_alert_enabled", true))
+    val cadenceAlertEnabled: LiveData<Boolean> = _cadenceAlertEnabled
+
+    fun setCadenceAlertEnabled(enabled: Boolean) {
+        alertPrefs.edit().putBoolean("cadence_alert_enabled", enabled).apply()
+        _cadenceAlertEnabled.postValue(enabled)
+        onDiagnosticsReceived(if (enabled) "📡 Cadence-Freeze Alert Source: ENABLED" else "📡 Cadence-Freeze Alert Source: DISABLED")
+    }
+
     // AI Hybrid State Management (Supports OpenAI & Gemini)
     private val aiPrefs by lazy { application.getSharedPreferences("ai_engine_prefs", android.content.Context.MODE_PRIVATE) }
 
@@ -176,13 +191,13 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _appMode.postValue(mode)
     }
 
-    // Target Multiplier Mode: Standard (All flights >= 1.80x) vs Sniper (>10x Only)
+    // Target Multiplier Mode: Standard "ALL (>2x)" (all flights >= 2.00x) vs Sniper (>10x Only)
     private val _isTarget10xOnly = MutableLiveData(false)
     val isTarget10xOnly: LiveData<Boolean> = _isTarget10xOnly
 
     fun setTarget10xMode(enabled: Boolean) {
         _isTarget10xOnly.postValue(enabled)
-        onDiagnosticsReceived(if (enabled) "🎯 Target Mode: >10x (High-Multiplier Sniper Alert Armed)" else "⚡ Target Mode: Standard (All Flights >= 1.80x)")
+        onDiagnosticsReceived(if (enabled) "🎯 Target Mode: >10x (High-Multiplier Sniper Alert Armed)" else "⚡ Target Mode: Standard (All Flights >= 2.00x)")
     }
 
     // WinGo / BigSmall Lottery Protocol Engine & LiveData
@@ -429,6 +444,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     // the round. Which banner is actually shown is arbitrated centrally in maybePublishPreCrashAlert().
     private val stutterAlertFiredForRound = AtomicBoolean(false)
     private val patternAlertFiredForRound = AtomicBoolean(false)
+    private val cadenceAlertFiredForRound = AtomicBoolean(false)
+    // Requires the freeze condition to persist across 2 consecutive 20ms polls (~20-40ms) before
+    // firing, so a single jittery/delayed WebSocket packet can't trigger a false cash-out alert.
+    private var consecutiveFreezeHits: Int = 0
     private var fastPathLastRoundId: String = ""
     private var lastStutterAlertMult: Double = 0.0
     private var lastStutterAlertTime: Long = 0L
@@ -519,9 +538,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * REAL-TIME TICK CADENCE FREEZE MONITOR: Fast loop (12ms) evaluating the live
+     * REAL-TIME TICK CADENCE FREEZE MONITOR: Fast loop (20ms) evaluating the live
      * tick arrival intervals. If the Spribe server halts multiplier ticks (cadence freeze),
-     * fires an immediate PRE-CRASH alert during the gap, 50-180ms BEFORE the game renders "Flew Away".
+     * fires a PRE-CRASH alert during the gap, 50-180ms BEFORE the game renders "Flew Away".
+     *
+     * Debounced: the freeze condition must hold on 2 consecutive polls (~20-40ms apart) before
+     * firing, so a single delayed/jittery WebSocket packet can't trigger a false alert on its own.
      */
     private fun startRiskMonitor() {
         riskMonitorJob = viewModelScope.launch(Dispatchers.Default) {
@@ -534,13 +556,62 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
                     if (currentMult >= 1.25) {
                         val freezeResult = liveTickAnalyzer.checkForFreeze(now, currentMult)
                         if (freezeResult.freezeDetected) {
-                            // Cadence gap logged for telemetry without firing fake vibrations
-                            onDiagnosticsReceived("[CADENCE_TELEMETRY] Server cadence paused (${freezeResult.currentGapMs}ms @ ${"%.2f".format(currentMult)}x)")
+                            consecutiveFreezeHits++
+                            onDiagnosticsReceived("[CADENCE_TELEMETRY] Server cadence paused (${freezeResult.currentGapMs}ms @ ${"%.2f".format(currentMult)}x, hit=$consecutiveFreezeHits)")
+                            if (consecutiveFreezeHits >= 2) {
+                                onCadenceFreezeConfirmed(currentMult)
+                            }
+                        } else {
+                            consecutiveFreezeHits = 0
                         }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Fires once the cadence-freeze has been confirmed across 2 consecutive polls. Guarded by its
+     * own one-shot flag (see stutterAlertFiredForRound comment) and by the user-facing settings
+     * toggle, since this is a newer, less field-tested signal than the animation-stutter detector.
+     */
+    private fun onCadenceFreezeConfirmed(currentMult: Double) {
+        if (_cadenceAlertEnabled.value == false) return
+
+        val currentRound = protocolEngine.currentRoundId
+        if (currentRound.isEmpty() || currentRound == "--" || currentRound == lastCrashedRoundId) return
+
+        val now = System.currentTimeMillis()
+        val crashTime = if (lastCrashWallTime > 0) lastCrashWallTime else protocolEngine.lastCrashTimestamp
+        if (crashTime > 0 && (now - crashTime < 4000L)) return
+
+        val is10x = _isTarget10xOnly.value == true
+        val minThreshold = if (is10x) 10.0 else 2.0
+        if (currentMult < minThreshold) return
+
+        synchronized(this) {
+            if (fastPathLastRoundId == currentRound && cadenceAlertFiredForRound.get()) return
+            fastPathLastRoundId = currentRound
+            cadenceAlertFiredForRound.set(true)
+            liveTickAnalyzer.markAlertFired()
+        }
+
+        // Corroboration: if the stutter detector has ALSO already fired for this round, label the
+        // alert as confirmed-by-both-signals rather than a single independent source.
+        val confirmedByStutter = stutterAlertFiredForRound.get()
+        val alertType = when {
+            confirmedByStutter && is10x -> "TARGET_10X_CADENCE_CONFIRMED"
+            confirmedByStutter -> "CADENCE_CONFIRMED"
+            is10x -> "TARGET_10X_CADENCE_FREEZE"
+            else -> "CADENCE_FREEZE"
+        }
+        val confidence = if (confirmedByStutter) "CRITICAL" else "HIGH"
+
+        maybePublishPreCrashAlert(
+            PreCrashAlertState(true, currentRound, currentMult, confidence, alertType),
+            source = "CADENCE"
+        )
+        onDiagnosticsReceived("[$alertType] ⚡ Cadence Cashout Alert @ ${"%.2f".format(currentMult)}x")
     }
 
     override fun onRawEventReceived(transport: String, direction: String, payload: String?, size: Int) {
@@ -643,7 +714,7 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val now = System.currentTimeMillis()
 
         // NOTE: We intentionally do NOT gate on protocolEngine.currentState/activeRound?.status here.
-        // The JS-side frame-audit loop already requires isGameContext() + flightActive + mult >= 1.80
+        // The JS-side frame-audit loop already requires isGameContext() + flightActive + mult >= 2.0
         // before calling this bridge method. The native round state machine is driven only by
         // WebSocket parsing (discoverMultiplier() explicitly returns null for DOM/CANVAS transports),
         // so on games whose live signal is canvas/DOM-rendered, native state can legitimately never
@@ -663,17 +734,18 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val currentMult = protocolEngine.currentMultiplier
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
 
-        // STRICT 1c: Ground truth flight check: Multiplier MUST actively be >= 1.80x
-        if (currentMult < 1.80 && parsed < 1.80) return
+        // STRICT 1c: Ground truth flight check: Multiplier MUST actively be >= 2.00x (matches the
+        // "ALL (>2x)" UI label for standard mode)
+        if (currentMult < 2.0 && parsed < 2.0) return
 
         // STRICT 1d: Discard stale residual multiplier from previous round!
-        // If current round multiplier is still early (<1.80x), parsed cannot be trusted as flight
-        if (currentMult < 1.80 && parsed >= 1.80) {
-            onDiagnosticsReceived("[STUTTER_REJECT] Stale multiplier rejected: curMult=${currentMult}x < 1.80x, parsed=${parsed}x")
+        // If current round multiplier is still early (<2.00x), parsed cannot be trusted as flight
+        if (currentMult < 2.0 && parsed >= 2.0) {
+            onDiagnosticsReceived("[STUTTER_REJECT] Stale multiplier rejected: curMult=${currentMult}x < 2.00x, parsed=${parsed}x")
             return
         }
         // If parsed is more than 35% higher than authoritative flight multiplier, reject as lagging old round value
-        if (currentMult >= 1.80 && parsed > currentMult * 1.35) {
+        if (currentMult >= 2.0 && parsed > currentMult * 1.35) {
             onDiagnosticsReceived("[STUTTER_REJECT] Stale multiplier rejected: parsed=${parsed}x > curMult=${currentMult}x * 1.35")
             return
         }
@@ -689,11 +761,11 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        val liveMult = if (parsed in 1.80..maxOf(currentMult * 1.25, 2.0)) maxOf(parsed, currentMult) else currentMult
+        val liveMult = if (parsed in 2.0..maxOf(currentMult * 1.25, 2.0)) maxOf(parsed, currentMult) else currentMult
 
-        // STRICT 2: Check Target Filter Mode (>10x vs Standard >=1.80x)
+        // STRICT 2: Check Target Filter Mode (>10x vs Standard >=2.00x)
         val is10x = _isTarget10xOnly.value == true
-        val minThreshold = if (is10x) 10.0 else 1.80
+        val minThreshold = if (is10x) 10.0 else 2.0
         if (liveMult < minThreshold) return
 
         // STRICT 3: One alert per round for THIS producer only - no longer shares a flag with
@@ -714,7 +786,15 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _currentMultiplier.postValue(liveMult)
 
         // STRICT 5: Live authoritative flight multiplier for the alert (never past round values)
-        val alertType = if (is10x) "TARGET_10X_SNIPER" else "ANIMATION_MICRO_BLINK"
+        // Corroboration: if the cadence-freeze signal already fired for this round, mark the banner
+        // as confirmed-by-both-signals instead of a single independent source.
+        val confirmedByCadence = cadenceAlertFiredForRound.get()
+        val alertType = when {
+            confirmedByCadence && is10x -> "TARGET_10X_STUTTER_CONFIRMED"
+            confirmedByCadence -> "STUTTER_CONFIRMED"
+            is10x -> "TARGET_10X_SNIPER"
+            else -> "ANIMATION_MICRO_BLINK"
+        }
         maybePublishPreCrashAlert(
             PreCrashAlertState(true, currentRound, liveMult, "CRITICAL", alertType),
             source = "STUTTER"
@@ -722,19 +802,27 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         onDiagnosticsReceived("[$alertType] ⚡ Cashout Alert @ ${"%.2f".format(liveMult)}x (${deltaMs.toInt()}ms drop)")
     }
 
+    // Upgrade priority when two producers fire for the same round: a higher-priority source may
+    // replace an already-published lower-priority banner (e.g. to add corroboration), but never the
+    // reverse, so the UI never flickers downward to a weaker-confidence banner.
+    // STUTTER: most field-tested, render-level signal. CADENCE: newer protocol-level signal, fires
+    // earliest but less proven. PATTERN: historical/statistical signal, currently never invoked.
+    private fun alertSourcePriority(source: String): Int = when (source) {
+        "STUTTER" -> 2
+        "CADENCE" -> 1
+        else -> 0 // "PATTERN"
+    }
+
     /**
-     * Publishes a pre-crash alert banner, preferring the lower-latency animation-stutter signal
-     * (source = "STUTTER") over the pattern-based onPreCrashAlert signal (source = "PATTERN") when
-     * both arrive for the same round, so a weaker pattern match that fires first can never silently
-     * override a higher-quality stutter detection. Only ever publishes once per round per source
-     * ordering so the UI never flickers between competing banners.
+     * Publishes a pre-crash alert banner. If multiple producers (STUTTER / CADENCE / PATTERN) fire
+     * for the same round, only a strictly higher-priority source is allowed to replace an
+     * already-published banner (see alertSourcePriority), so the UI never flickers between
+     * competing banners and never downgrades to a weaker-confidence signal.
      */
     private fun maybePublishPreCrashAlert(candidate: PreCrashAlertState, source: String) {
         synchronized(this) {
             if (publishedAlertRoundId == candidate.roundId) {
-                // Already published for this round - only allow STUTTER to upgrade a PATTERN banner,
-                // never the reverse.
-                if (!(source == "STUTTER" && publishedAlertSource == "PATTERN")) return
+                if (alertSourcePriority(source) <= alertSourcePriority(publishedAlertSource)) return
             }
             publishedAlertRoundId = candidate.roundId
             publishedAlertSource = source
@@ -867,6 +955,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         prepareAlertFiredForRound.set(false)
         stutterAlertFiredForRound.set(false)
         patternAlertFiredForRound.set(false)
+        cadenceAlertFiredForRound.set(false)
+        consecutiveFreezeHits = 0
         fastPathLastRoundId = roundId
         lastStutterAlertMult = 0.0
         lastStutterAlertTime = 0L
@@ -887,9 +977,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
         // Discard any legacy post-crash alerts or alerts before multiplier start
         if (reason.startsWith("FLEW_AWAY")) return
-        if (protocolEngine.currentState != GameState.LIVE || currentMultiplier < 1.80) return
+        if (protocolEngine.currentState != GameState.LIVE || currentMultiplier < 2.0) return
         if (roundId.isEmpty() || roundId == "--" || roundId == lastCrashedRoundId) return
-        if (protocolEngine.currentMultiplier < 1.80) return
+        if (protocolEngine.currentMultiplier < 2.0) return
 
         val is10x = _isTarget10xOnly.value == true
         if (is10x && currentMultiplier < 10.0) return
@@ -928,6 +1018,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         synchronized(this) {
             stutterAlertFiredForRound.set(false)
             patternAlertFiredForRound.set(false)
+            cadenceAlertFiredForRound.set(false)
+            consecutiveFreezeHits = 0
             prepareAlertFiredForRound.set(false)
             fastPathLastRoundId = ""
             lastStutterAlertMult = 0.0

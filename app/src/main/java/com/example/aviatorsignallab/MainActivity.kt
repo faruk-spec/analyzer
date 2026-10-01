@@ -330,7 +330,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             val curStatus = viewModel.connectionStatus.value ?: ""
             val curMult = viewModel.currentMultiplier.value ?: 1.0
             val is10x = viewModel.isTarget10xOnly.value == true
-            val minAlertMult = if (is10x) 10.0 else 1.80
+            val minAlertMult = if (is10x) 10.0 else 2.0
 
             // STRICT GATING:
             // 1. Must have an active non-null alert
@@ -358,7 +358,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
 
-                // Urgent double haptic vibration ONLY when multiplier >= 1.80x in active flight
+                // Urgent double haptic vibration ONLY when multiplier >= minAlertMult (>=2.0x / >=10x) in active flight
                 triggerImmediateVibration()
             } else {
                 isPreCrashAlertActive = false
@@ -690,7 +690,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         // Target Mode Segmented Switch Listeners
         binding.btnTargetStandard.setOnClickListener {
             viewModel.setTarget10xMode(false)
-            Toast.makeText(this, "⚡ Mode: Standard (All Flights >= 1.80x)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "⚡ Mode: Standard (All Flights >= 2.00x)", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnTarget10x.setOnClickListener {
@@ -1483,6 +1483,12 @@ HMAC-SHA512: ${res.hmacSha512Hex.take(24)}...
         val btnTest = dialogView.findViewById<Button>(R.id.btnAiTestConnection)
         val btnLocal = dialogView.findViewById<Button>(R.id.btnAiUseLocalMode)
         val btnSave = dialogView.findViewById<Button>(R.id.btnAiSave)
+        val switchCadenceAlert = dialogView.findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchCadenceAlert)
+
+        switchCadenceAlert.isChecked = viewModel.cadenceAlertEnabled.value ?: true
+        switchCadenceAlert.setOnCheckedChangeListener { _, isChecked ->
+            viewModel.setCadenceAlertEnabled(isChecked)
+        }
 
         val currentProvider = viewModel.aiProvider.value ?: AiConsensusEngine.AiProvider.OPENAI
         if (currentProvider == AiConsensusEngine.AiProvider.OPENAI) {

@@ -593,7 +593,9 @@ object ScriptInjector {
                     }
 
                     var curM = window.__aviatorCurrentMult || 0.0;
-                    var flightActive = window.__aviatorFlightActive && curM >= 1.80;
+                    // Gate matches the native "ALL (>2x)" alert mode threshold (was 1.80, mismatched the
+                    // UI label which promises >2x) so the JS signal and the native gate agree.
+                    var flightActive = window.__aviatorFlightActive && curM >= 2.0;
 
                     // STRICT: Only evaluate stutters when the plane is actively flying and multiplier has started!
                     // Zero vibration before multiplier start, zero vibration during betting, countdown, or page load.

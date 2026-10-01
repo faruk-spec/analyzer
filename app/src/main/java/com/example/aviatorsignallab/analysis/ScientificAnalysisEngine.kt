@@ -78,22 +78,58 @@ class ScientificAnalysisEngine {
             discoveredPatterns.add(quietPattern)
         }
 
-        val conclusion = "Live Cadence Freeze Active: 2-Stage Multiplier & Fast-Path Intercept"
-        val confidence = if (uniqueCrashRounds >= 3) "HIGH" else "CALIBRATING"
+        // HONEST REPORTING: Pick the best validated pattern (highest precision, out-of-sample) rather
+        // than reporting fixed placeholder numbers. If nothing actually cleared the validation bar in
+        // ChronologicalValidator.evaluateOnTestSet (precision >= 0.75, FPR <= 0.15, >= 10 test crashes),
+        // we must say so instead of implying a 96%-precision detector exists when none was found.
+        val validatedPatterns = discoveredPatterns.filter { it.isValidated }
+        val bestPattern = validatedPatterns.maxByOrNull { it.precision }
+
+        val validatedPatternsCount = validatedPatterns.size
+        val discoveredPatternsCount = discoveredPatterns.size
+
+        val conclusion: String
+        val confidence: String
+        val bestPrecision: Double
+        val bestRecall: Double
+        val bestFalsePositiveRate: Double
+        val activeCandidateDescriptor: String
+
+        if (bestPattern != null) {
+            conclusion = "Validated out-of-sample pattern found: ${bestPattern.descriptor}"
+            confidence = when {
+                bestPattern.precision >= 0.90 && bestPattern.crashSupport >= 20 -> "HIGH"
+                bestPattern.precision >= 0.75 -> "MODERATE"
+                else -> "LOW"
+            }
+            bestPrecision = bestPattern.precision
+            bestRecall = bestPattern.recall
+            bestFalsePositiveRate = bestPattern.falsePositiveRate
+            activeCandidateDescriptor = bestPattern.descriptor
+        } else {
+            conclusion = "No candidate pattern cleared out-of-sample validation (needs precision >= 75%, " +
+                "FPR <= 15%, >= 10 test crashes). This summary reflects live telemetry collection only; " +
+                "it is NOT used to drive any alert."
+            confidence = "CALIBRATING"
+            bestPrecision = 0.0
+            bestRecall = 0.0
+            bestFalsePositiveRate = 0.0
+            activeCandidateDescriptor = "NONE_VALIDATED"
+        }
 
         val summary = ResearchSummary(
             totalRounds = totalRoundsCount,
             totalEvents = totalEventsCount,
             crashRoundsAnalyzed = uniqueCrashRounds,
             controlWindowsAnalyzed = uniqueControlRounds,
-            discoveredPatternsCount = 1,
-            validatedPatternsCount = 1,
-            bestPrecision = if (uniqueCrashRounds >= 3) 0.96 else 0.85,
-            bestRecall = if (uniqueCrashRounds >= 3) 0.94 else 0.80,
-            bestFalsePositiveRate = if (uniqueCrashRounds >= 3) 0.04 else 0.08,
+            discoveredPatternsCount = discoveredPatternsCount,
+            validatedPatternsCount = validatedPatternsCount,
+            bestPrecision = bestPrecision,
+            bestRecall = bestRecall,
+            bestFalsePositiveRate = bestFalsePositiveRate,
             confidence = confidence,
             conclusion = conclusion,
-            activeCandidateDescriptor = "LIVE_TICK_CADENCE_FREEZE"
+            activeCandidateDescriptor = activeCandidateDescriptor
         )
 
         return Pair(summary, discoveredPatterns)
