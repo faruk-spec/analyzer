@@ -181,7 +181,7 @@ class ProtocolDiscoveryEngineTest {
     // --- Regression tests for the animation micro-blink / pre-crash alert reliability fixes ---
 
     @Test
-    fun testLastCompletedRoundFinalMultiplierSurvivesNextRoundStart() {
+    fun testLastCrashFinalMultiplierSurvivesNextRoundStart() {
         val engine = ProtocolDiscoveryEngine()
 
         val t0 = 10000L
@@ -192,7 +192,7 @@ class ProtocolDiscoveryEngineTest {
         engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":3,"mul":"3.50"}""", t0 + 1500L)
 
         assertEquals(GameState.CRASH, engine.currentState)
-        assertEquals(3.50, engine.lastCompletedRoundFinalMultiplier, 0.001)
+        assertEquals(3.50, engine.lastCrashFinalMultiplier, 0.001)
 
         // Round B starts immediately after
         engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":1,"rbd":"40002","ttl":5}""", t0 + 2000L)
@@ -200,12 +200,12 @@ class ProtocolDiscoveryEngineTest {
         // Bug fixed: previously activeRound?.finalMultiplier reset to 1.0 as soon as the next round's
         // GameRound was created; callers needing "what did the previous round crash at" must survive
         // past round start, since onAnimationStutter's stale-multiplier guard depends on this.
-        assertEquals(3.50, engine.lastCompletedRoundFinalMultiplier, 0.001)
+        assertEquals(3.50, engine.lastCrashFinalMultiplier, 0.001)
         assertEquals(1.0, engine.activeRound?.finalMultiplier ?: -1.0, 0.001)
     }
 
     @Test
-    fun testLastCrashLockoutTimestampIsNotResetByNextRoundStart() {
+    fun testLastCrashTimestampIsNotResetByNextRoundStart() {
         val engine = ProtocolDiscoveryEngine()
 
         val t0 = 10000L
@@ -213,14 +213,12 @@ class ProtocolDiscoveryEngineTest {
         engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":2,"mul":"1.00"}""", t0 + 500L)
         engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":3,"mul":"2.00"}""", t0 + 1000L)
 
-        assertEquals(t0 + 1000L, engine.lastCrashLockoutTimestamp)
+        assertEquals(t0 + 1000L, engine.lastCrashTimestamp)
 
-        // lastCrashTimestamp is legacy/per-round and IS reset by transitionToStart...
+        // lastCrashTimestamp must remain the real crash time across a fast-starting next round so the
+        // Kotlin-side post-crash cooldown checks in onAnimationStutter cannot be defeated by the next
+        // round starting quickly after the crash.
         engine.processRawEvent("WEBSOCKET", "INCOMING", """{"cmd":84,"sta":1,"rbd":"50002","ttl":5}""", t0 + 1200L)
-        assertEquals(0L, engine.lastCrashTimestamp)
-
-        // ...but lastCrashLockoutTimestamp must remain the real crash time so the Kotlin-side 3.5s/8s
-        // post-crash cooldown in onAnimationStutter cannot be defeated by a fast-starting next round.
-        assertEquals(t0 + 1000L, engine.lastCrashLockoutTimestamp)
+        assertEquals(t0 + 1000L, engine.lastCrashTimestamp)
     }
 }
