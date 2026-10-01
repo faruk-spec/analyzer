@@ -106,19 +106,23 @@ class ProtocolDiscoveryEngine(
         val eventType = discoverEventType(sanitized, fieldMap, transport)
         val command = discoverCommand(fieldMap)
         val extractedMultiplier = discoverMultiplier(sanitized, fieldMap, transport)
-        val extractedRoundId = discoverRoundId(fieldMap)
+        val extractedRoundId = discoverRoundId(fieldMap, sanitized)
         val isCrashSignal = detectCrashSignal(sanitized, fieldMap)
 
         if (command == "85" || (extractedMultiplier != null && transport == "WEBSOCKET")) {
             lastLiveTickTimestamp = timestamp
         }
 
-        // 3. Robust State Transitions
+        // 3. Robust State Transitions — Strictly Monotonic Round IDs
         if (extractedRoundId != null && extractedRoundId != currentRoundId && !extractedRoundId.startsWith("rnd_")) {
-            if (currentState == GameState.LIVE) {
-                transitionToCrash(timestamp, currentMultiplier)
+            // STRICT: Only advance if candidate round ID is strictly newer than currentRoundId!
+            // Completely prevents history packets (e.g. round 100 while live is 103) from regressing state!
+            if (isNewerRoundId(extractedRoundId, currentRoundId)) {
+                if (currentState == GameState.LIVE) {
+                    transitionToCrash(timestamp, currentMultiplier)
+                }
+                transitionToStart(extractedRoundId, timestamp)
             }
-            transitionToStart(extractedRoundId, timestamp)
         }
 
         if (command == "84" && fieldMap["sta"] == "2") {
@@ -131,7 +135,9 @@ class ProtocolDiscoveryEngine(
         } else if (extractedMultiplier != null && extractedMultiplier >= 1.0) {
             handleMultiplierUpdate(extractedMultiplier, extractedRoundId, timestamp)
         } else if (extractedRoundId != null && extractedRoundId != currentRoundId && currentState != GameState.LIVE && currentState != GameState.UNKNOWN) {
-            transitionToStart(extractedRoundId, timestamp)
+            if (isNewerRoundId(extractedRoundId, currentRoundId)) {
+                transitionToStart(extractedRoundId, timestamp)
+            }
         }
 
         // 4. Construct LiveEvent
@@ -195,7 +201,11 @@ class ProtocolDiscoveryEngine(
                     transitionToCrash(timestamp, crashMultiplier)
 
                     // Start new round
-                    val nextRoundId = roundIdCandidate ?: "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                    val nextRoundId = if (roundIdCandidate != null && isNewerRoundId(roundIdCandidate, currentRoundId)) {
+                        roundIdCandidate
+                    } else {
+                        "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                    }
                     transitionToStart(nextRoundId, timestamp)
                     currentMultiplier = newMultiplier
                     transitionToLive()
@@ -210,7 +220,11 @@ class ProtocolDiscoveryEngine(
             }
             GameState.CRASH, GameState.ROUND_COMPLETE, GameState.NEXT_ROUND -> {
                 // If multiplier is active again, transition to next round
-                val nextRoundId = roundIdCandidate ?: "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                val nextRoundId = if (roundIdCandidate != null && isNewerRoundId(roundIdCandidate, currentRoundId)) {
+                    roundIdCandidate
+                } else {
+                    "rnd_${syntheticRoundCounter.getAndIncrement()}"
+                }
                 transitionToStart(nextRoundId, timestamp)
                 currentMultiplier = newMultiplier
                 transitionToLive()
@@ -336,11 +350,22 @@ class ProtocolDiscoveryEngine(
             return null
         }
 
-        // Filter out false casino lobby percentage strings (e.g. RTP 97.22%) and lobby catalogs
-        if (sanitized.contains("RTP", ignoreCase = true) ||
-            sanitized.contains("%") ||
-            sanitized.contains("platformList", ignoreCase = true) ||
-            sanitized.contains("winOdds", ignoreCase = true)) {
+        // Discard history, payouts, and bets lists to prevent past round multipliers from leaking
+        if (sanitized.contains("\"history\"") ||
+            sanitized.contains("\"payouts\"") ||
+            sanitized.contains("\"user_bets\"") ||
+            sanitized.contains("\"all_bets\"") ||
+            sanitized.contains("\"my_bets\"") ||
+            sanitized.contains("platformList") ||
+            sanitized.contains("winOdds") ||
+            sanitized.contains("RTP", ignoreCase = true) ||
+            sanitized.contains("%")) {
+            return null
+        }
+
+        // For Spribe Aviator, live multipliers only arrive in cmd 85 (live ticks) or cmd 84 (crash)
+        val cmd = fields["cmd"] ?: ""
+        if (cmd.isNotBlank() && cmd != "85" && cmd != "84") {
             return null
         }
 
@@ -355,7 +380,7 @@ class ProtocolDiscoveryEngine(
         // 2. Direct field checking across explicit multiplier keys
         for ((path, v) in fields) {
             val lowerPath = path.lowercase()
-            if (lowerPath.contains("winodds") || lowerPath.contains("platformlist") || lowerPath.contains("rtp")) continue
+            if (lowerPath.contains("winodds") || lowerPath.contains("platformlist") || lowerPath.contains("rtp") || lowerPath.contains("history")) continue
 
             val key = path.substringAfterLast(".").substringBefore("[").lowercase()
             if (key in listOf("multiplier", "coefficient", "coef", "odds", "currmult", "finalmult")) {
@@ -378,16 +403,25 @@ class ProtocolDiscoveryEngine(
             m2.groupValues[1].toDoubleOrNull()?.let { return it }
         }
 
-        // 5. Socket.io array payload like 42["multi", 1.45] or ["flying", 2.10]
-        val m3 = Regex("""\[\s*["'](?:multi|flying|tick|odds|rate|stage|point|score|crash)["']\s*,\s*([0-9]{1,4}(?:\.[0-9]{1,4})?)""", RegexOption.IGNORE_CASE).find(sanitized)
-        if (m3 != null) {
-            m3.groupValues[1].toDoubleOrNull()?.let { if (it in 1.0..100000.0) return it }
-        }
-
         return null
     }
 
-    private fun discoverRoundId(fields: Map<String, String>): String? {
+    private fun discoverRoundId(fields: Map<String, String>, sanitized: String): String? {
+        // Discard history, payouts, and bets lists to prevent past round regression
+        if (sanitized.contains("\"history\"") ||
+            sanitized.contains("\"payouts\"") ||
+            sanitized.contains("\"user_bets\"") ||
+            sanitized.contains("\"all_bets\"") ||
+            sanitized.contains("\"my_bets\"")) {
+            return null
+        }
+
+        val cmd = fields["cmd"] ?: ""
+        // Live round IDs in Spribe only arrive in lifecycle/tick commands
+        if (cmd.isNotBlank() && cmd != "84" && cmd != "85") {
+            return null
+        }
+
         // 1. Spribe Aviator protocol key: "rbd" (Round Based ID, e.g. "25068823")
         fields["rbd"]?.let { rbd ->
             val trimmed = rbd.trim()
@@ -400,7 +434,7 @@ class ProtocolDiscoveryEngine(
         for ((path, v) in fields) {
             if (v.isBlank() || v == "[REDACTED]" || v == "null" || v == "0") continue
             val lowerPath = path.lowercase()
-            if (lowerPath.contains("platformlist") || lowerPath.contains("gamelogo") || lowerPath.contains("gamename")) continue
+            if (lowerPath.contains("platformlist") || lowerPath.contains("gamelogo") || lowerPath.contains("gamename") || lowerPath.contains("history")) continue
 
             val key = path.substringAfterLast(".").substringBefore("[").lowercase()
             if (key in listOf("round_id", "roundid", "game_round_id", "round_number", "roundno")) {
@@ -416,6 +450,17 @@ class ProtocolDiscoveryEngine(
             }
         }
         return null
+    }
+
+    private fun isNewerRoundId(candidate: String, current: String): Boolean {
+        if (current == "--" || current.startsWith("rnd_")) return true
+        if (candidate == current) return false
+        val candNum = candidate.filter { it.isDigit() }.toLongOrNull()
+        val curNum = current.filter { it.isDigit() }.toLongOrNull()
+        if (candNum != null && curNum != null) {
+            return candNum > curNum
+        }
+        return candidate.length >= current.length && candidate != current
     }
 
     private fun detectCrashSignal(sanitized: String, fields: Map<String, String>): Boolean {
