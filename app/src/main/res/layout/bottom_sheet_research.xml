@@ -1063,7 +1063,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:columnCount="2"
-                    android:rowCount="2"
+                    android:rowCount="3"
                     android:layout_marginBottom="10dp">
 
                     <com.google.android.material.button.MaterialButton
@@ -1100,6 +1100,7 @@
                         android:layout_height="wrap_content"
                         android:layout_columnWeight="1"
                         android:layout_marginEnd="4dp"
+                        android:layout_marginBottom="6dp"
                         android:text="@string/btn_features_csv"
                         android:textSize="11sp"
                         android:textColor="@color/text_primary"
@@ -1113,11 +1114,28 @@
                         android:layout_height="wrap_content"
                         android:layout_columnWeight="1"
                         android:layout_marginStart="4dp"
+                        android:layout_marginBottom="6dp"
                         android:text="@string/btn_protocol_csv"
                         android:textSize="11sp"
                         android:textColor="@color/text_primary"
                         app:backgroundTint="@color/bg_card"
                         app:strokeColor="@color/bg_card_border"
+                        app:strokeWidth="1dp" />
+
+                    <!-- Alert accuracy log: every time a pre-crash alert actually fired, with the
+                         source (STUTTER/CADENCE/confirmed-by-both), fire multiplier, and the round's
+                         real crash outcome - so lead-time / false-positive accuracy can be analyzed
+                         offline from real play sessions. -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnExportAlertsCsv"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_columnSpan="2"
+                        android:text="📊 Alert Accuracy Log (CSV)"
+                        android:textSize="11sp"
+                        android:textColor="@color/accent_emerald"
+                        app:backgroundTint="@color/bg_card"
+                        app:strokeColor="@color/accent_emerald"
                         app:strokeWidth="1dp" />
 
                     <com.google.android.material.button.MaterialButton

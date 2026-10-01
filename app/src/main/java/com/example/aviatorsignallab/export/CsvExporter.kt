@@ -1,5 +1,6 @@
 package com.example.aviatorsignallab.export
 
+import com.example.aviatorsignallab.model.AlertFireLog
 import com.example.aviatorsignallab.model.DiscoveredPattern
 import com.example.aviatorsignallab.model.GameRound
 import com.example.aviatorsignallab.model.LiveEvent
@@ -116,6 +117,28 @@ object CsvExporter {
                     "%.4f".format(p.recall),
                     "%.4f".format(p.falsePositiveRate),
                     p.isValidated
+                ).joinToString(",")
+                writer.write(line + "\n")
+            }
+        }
+    }
+
+    fun exportAlertFireLog(logs: List<AlertFireLog>, destinationFile: File) {
+        OutputStreamWriter(FileOutputStream(destinationFile), StandardCharsets.UTF_8).use { writer ->
+            writer.write("id,round_id,source,reason,confidence,target_mode,fire_wall_time,multiplier_at_fire,round_final_multiplier,round_crash_wall_time,lead_time_ms\n")
+            for (l in logs) {
+                val line = listOf(
+                    l.id,
+                    escapeCsvField(l.roundId),
+                    escapeCsvField(l.source),
+                    escapeCsvField(l.reason),
+                    escapeCsvField(l.confidence),
+                    escapeCsvField(l.targetMode),
+                    l.fireWallTime,
+                    "%.2f".format(l.multiplierAtFire),
+                    if (l.roundFinalMultiplier >= 0) "%.2f".format(l.roundFinalMultiplier) else "",
+                    if (l.roundCrashWallTime >= 0) l.roundCrashWallTime.toString() else "",
+                    if (l.leadTimeMs >= 0) l.leadTimeMs.toString() else ""
                 ).joinToString(",")
                 writer.write(line + "\n")
             }

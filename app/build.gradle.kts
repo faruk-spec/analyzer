@@ -15,8 +15,8 @@ android {
         applicationId = "com.aviator.signallab"
         minSdk = 26
         targetSdk = 35
-        versionCode = 53
-        versionName = "1.8.5"
+        versionCode = 54
+        versionName = "1.8.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

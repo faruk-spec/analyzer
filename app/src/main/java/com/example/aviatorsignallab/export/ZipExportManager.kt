@@ -31,12 +31,14 @@ class ZipExportManager(private val context: Context) {
         val events = db.liveEventDao().getAllEvents()
         val features = db.featureDao().getAllFeatures()
         val patterns = db.featureDao().getAllPatterns()
+        val alertLogs = db.alertFireLogDao().getAll()
 
         val fRounds = File(tempDir, "rounds.csv")
         val fEvents = File(tempDir, "live_events.csv")
         val fFeatures = File(tempDir, "round_features.csv")
         val fFields = File(tempDir, "protocol_fields.csv")
         val fPatterns = File(tempDir, "discovered_patterns.csv")
+        val fAlerts = File(tempDir, "alert_fire_log.csv")
         val fManifest = File(tempDir, "manifest.json")
 
         CsvExporter.exportRounds(rounds, fRounds)
@@ -44,6 +46,7 @@ class ZipExportManager(private val context: Context) {
         CsvExporter.exportFeatures(features, fFeatures)
         CsvExporter.exportProtocolFields(events, fFields)
         CsvExporter.exportDiscoveredPatterns(patterns, fPatterns)
+        CsvExporter.exportAlertFireLog(alertLogs, fAlerts)
 
         // Generate manifest
         val manifest = mapOf(
@@ -54,6 +57,7 @@ class ZipExportManager(private val context: Context) {
             "totalEvents" to events.size,
             "totalFeatures" to features.size,
             "totalPatterns" to patterns.size,
+            "totalAlertFires" to alertLogs.size,
             "preCrashWindows" to listOf("T_5.0s_TO_0.1s", "T_3.0s_TO_0.1s", "T_2.0s_TO_0.1s", "T_1.0s_TO_0.1s", "T_0.5s_TO_0.1s", "T_0.25s_TO_0.1s")
         )
         fManifest.writeText(gson.toJson(manifest))
@@ -61,7 +65,7 @@ class ZipExportManager(private val context: Context) {
         // Create Zip file
         val zipFile = File(exportDir, "AviatorSignalLab_Dataset_${System.currentTimeMillis()}.zip")
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-            val filesToZip = mutableListOf(fRounds, fEvents, fFeatures, fFields, fPatterns, fManifest)
+            val filesToZip = mutableListOf(fRounds, fEvents, fFeatures, fFields, fPatterns, fAlerts, fManifest)
             filesToZip.addAll(extraFiles)
             for (file in filesToZip) {
                 if (file.exists()) {

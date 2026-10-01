@@ -863,6 +863,10 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             exportCsvAndShare("FEATURES")
         }
 
+        sheet.btnExportAlertsCsv.setOnClickListener {
+            exportCsvAndShare("ALERTS")
+        }
+
         sheet.btnExportProtocolCsv.setOnClickListener {
             exportCsvAndShare("PROTOCOL")
         }

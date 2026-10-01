@@ -12,6 +12,7 @@ import com.example.aviatorsignallab.analysis.TickFreezeResult
 import com.example.aviatorsignallab.analysis.ScientificAnalysisEngine
 import com.example.aviatorsignallab.probability.ProbabilityEngine
 import com.example.aviatorsignallab.export.ZipExportManager
+import com.example.aviatorsignallab.model.AlertFireLog
 import com.example.aviatorsignallab.model.GameRound
 import com.example.aviatorsignallab.model.LiveEvent
 import com.example.aviatorsignallab.model.ResearchSummary
@@ -454,6 +455,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private var publishedAlertRoundId: String = ""
     private var publishedAlertSource: String = ""
 
+    // alert_fire_log row IDs awaiting an outcome update (round_final_multiplier/lead_time_ms),
+    // keyed by roundId, filled in once the round actually crashes (see onRoundCrashDetected).
+    private val pendingAlertLogIdsForRound = mutableMapOf<String, MutableList<Long>>()
+
     var lastCrashWallTime: Long = 0L
         private set
     var lastCrashFinalMultiplier: Double = 0.0
@@ -818,6 +823,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
      * for the same round, only a strictly higher-priority source is allowed to replace an
      * already-published banner (see alertSourcePriority), so the UI never flickers between
      * competing banners and never downgrades to a weaker-confidence signal.
+     *
+     * Every actual publish (not every suppressed candidate) is persisted to alert_fire_log so a
+     * real play session can be exported afterwards and the true lead-time / accuracy measured
+     * against what the round actually did (see onRoundCrashDetected for the outcome update).
      */
     private fun maybePublishPreCrashAlert(candidate: PreCrashAlertState, source: String) {
         synchronized(this) {
@@ -828,6 +837,25 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             publishedAlertSource = source
         }
         _preCrashAlert.postValue(candidate)
+
+        val targetMode = if (_isTarget10xOnly.value == true) "TARGET_10X" else "ALL_2X"
+        val entry = AlertFireLog(
+            roundId = candidate.roundId,
+            source = source,
+            reason = candidate.reason,
+            confidence = candidate.confidence,
+            targetMode = targetMode,
+            fireWallTime = candidate.timestamp,
+            multiplierAtFire = candidate.multiplier
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val insertedId = db.alertFireLogDao().insert(entry)
+                synchronized(this@ResearchViewModel) {
+                    pendingAlertLogIdsForRound.getOrPut(candidate.roundId) { mutableListOf() }.add(insertedId)
+                }
+            } catch (e: Exception) {}
+        }
     }
 
     override fun onDiagnosticsReceived(message: String) {
@@ -1015,6 +1043,25 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         // Clear any pre-crash alert immediately upon crash so no delayed/post-crash alert stays or re-fires!
         _preCrashAlert.postValue(null)
 
+        // Backfill the real crash outcome onto any alert_fire_log rows published for this round,
+        // so the exported CSV can compute true lead-time and multiplier accuracy offline.
+        val pendingIds = synchronized(this) { pendingAlertLogIdsForRound.remove(roundId) }
+        if (!pendingIds.isNullOrEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val entries = db.alertFireLogDao().getForRound(roundId)
+                    for (entry in entries) {
+                        if (pendingIds.contains(entry.id)) {
+                            entry.roundFinalMultiplier = finalMultiplier
+                            entry.roundCrashWallTime = now
+                            entry.leadTimeMs = now - entry.fireWallTime
+                            db.alertFireLogDao().update(entry)
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+
         synchronized(this) {
             stutterAlertFiredForRound.set(false)
             patternAlertFiredForRound.set(false)
@@ -1095,6 +1142,8 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             db.liveEventDao().clearAll()
             db.featureDao().clearFeatures()
             db.featureDao().clearPatterns()
+            db.alertFireLogDao().clearAll()
+            synchronized(this@ResearchViewModel) { pendingAlertLogIdsForRound.clear() }
 
             // Reset live cadence analyzer
             liveTickAnalyzer.onNewRound("")
@@ -1127,6 +1176,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
                 val f = File(exportDir, "round_features_${System.currentTimeMillis()}.csv")
                 val list = db.featureDao().getAllFeatures()
                 com.example.aviatorsignallab.export.CsvExporter.exportFeatures(list, f)
+                f
+            }
+            "ALERTS" -> {
+                val f = File(exportDir, "alert_fire_log_${System.currentTimeMillis()}.csv")
+                val list = db.alertFireLogDao().getAll()
+                com.example.aviatorsignallab.export.CsvExporter.exportAlertFireLog(list, f)
                 f
             }
             "WINGO", "WINGO_AUDIT" -> {
