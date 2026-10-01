@@ -15,7 +15,8 @@ interface WebViewStatusListener {
 }
 
 class InstrumentedWebViewClient(
-    private val statusListener: WebViewStatusListener
+    private val statusListener: WebViewStatusListener,
+    private val deviceFrameIntervalMs: Double = 16.6
 ) : WebViewClient() {
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -49,6 +50,6 @@ class InstrumentedWebViewClient(
     }
 
     private fun injectObservabilityScript(view: WebView?) {
-        view?.evaluateJavascript(ScriptInjector.INJECTION_SCRIPT, null)
+        view?.evaluateJavascript(ScriptInjector.buildInjectionScript(deviceFrameIntervalMs), null)
     }
 }

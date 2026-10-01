@@ -424,12 +424,16 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private var gapWatcherJob: Job? = null
     private var riskMonitorJob: Job? = null
 
-    // Fast-path crash dedup guard: prevents double-alerting when the normal pipeline
-    // processes the same crash packet that the fast-path already handled.
-    private val fastPathCrashFiredForRound = AtomicBoolean(false)
+    // Each pre-crash alert producer tracks its OWN one-shot guard so a weaker/earlier signal from one
+    // producer can never silently block a later, higher-quality signal from the other for the rest of
+    // the round. Which banner is actually shown is arbitrated centrally in maybePublishPreCrashAlert().
+    private val stutterAlertFiredForRound = AtomicBoolean(false)
+    private val patternAlertFiredForRound = AtomicBoolean(false)
     private var fastPathLastRoundId: String = ""
     private var lastStutterAlertMult: Double = 0.0
     private var lastStutterAlertTime: Long = 0L
+    private var publishedAlertRoundId: String = ""
+    private var publishedAlertSource: String = ""
 
     var lastCrashWallTime: Long = 0L
         private set
@@ -638,27 +642,31 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     override fun onAnimationStutter(deltaMs: Double, multiplierStr: String) {
         val now = System.currentTimeMillis()
 
-        // STRICT 1: Must be in active LIVE flight (NEVER after crash, NEVER during countdown/betting)
-        if (protocolEngine.currentState != GameState.LIVE) return
+        // NOTE: We intentionally do NOT gate on protocolEngine.currentState/activeRound?.status here.
+        // The JS-side frame-audit loop already requires isGameContext() + flightActive + mult >= 1.80
+        // before calling this bridge method. The native round state machine is driven only by
+        // WebSocket parsing (discoverMultiplier() explicitly returns null for DOM/CANVAS transports),
+        // so on games whose live signal is canvas/DOM-rendered, native state can legitimately never
+        // reach LIVE while JS already knows a flight is active - gating on it here silently dropped
+        // every stutter event in that case. The crash-cooldown and stale-multiplier checks below are
+        // time/ordering based, not dependent on which transport carries the live signal, so they
+        // remain fully authoritative without the native-state gate.
 
-        // STRICT 1b: Active round status must explicitly be LIVE
-        if (protocolEngine.activeRound?.status != "LIVE") return
-
-        // STRICT 1c: Post-Crash Lockout: Must be at least 4000ms after last crash to prevent post-crash scene hitches from alerting
+        // STRICT 1: Post-Crash Lockout: Must be at least 4000ms after last crash to prevent post-crash scene hitches from alerting
         val crashTime = if (lastCrashWallTime > 0) lastCrashWallTime else protocolEngine.lastCrashTimestamp
         if (crashTime > 0 && (now - crashTime < 4000L)) return
 
         val currentRound = protocolEngine.currentRoundId
-        // STRICT 1d: Never alert on an uninitialized round or a round that already crashed!
+        // STRICT 1b: Never alert on an uninitialized round or a round that already crashed!
         if (currentRound.isEmpty() || currentRound == "--" || currentRound == lastCrashedRoundId) return
 
         val currentMult = protocolEngine.currentMultiplier
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
 
-        // STRICT 1e: Ground truth flight check: Multiplier MUST actively be >= 1.80x
+        // STRICT 1c: Ground truth flight check: Multiplier MUST actively be >= 1.80x
         if (currentMult < 1.80 && parsed < 1.80) return
 
-        // STRICT 1f: Discard stale residual multiplier from previous round!
+        // STRICT 1d: Discard stale residual multiplier from previous round!
         // If current round multiplier is still early (<1.80x), parsed cannot be trusted as flight
         if (currentMult < 1.80 && parsed >= 1.80) {
             onDiagnosticsReceived("[STUTTER_REJECT] Stale multiplier rejected: curMult=${currentMult}x < 1.80x, parsed=${parsed}x")
@@ -670,7 +678,10 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        // STRICT 1g: Discard if within 8s of last crash and multiplier <= lastCrashFinalMultiplier
+        // STRICT 1e: Discard if within 8s of last crash and multiplier <= the previous round's final
+        // multiplier. Falls back to protocolEngine.lastCrashFinalMultiplier (captured at crash time,
+        // survives the next round's activeRound replacement) if this view model's own cached copy
+        // hasn't been set yet.
         val lastCrashMult = if (lastCrashFinalMultiplier > 1.0) lastCrashFinalMultiplier else protocolEngine.lastCrashFinalMultiplier
         if (crashTime > 0 && (now - crashTime < 8000L)) {
             if (lastCrashMult > 1.0 && (currentMult <= lastCrashMult && parsed <= lastCrashMult)) {
@@ -685,14 +696,15 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val minThreshold = if (is10x) 10.0 else 1.80
         if (liveMult < minThreshold) return
 
-        // STRICT 3: Strictly ONE single alert per round!
-        // Completely eliminates multiple alert spam on high multipliers (e.g. 248x round)
+        // STRICT 3: One alert per round for THIS producer only - no longer shares a flag with
+        // onPreCrashAlert, so a pattern-match firing first can no longer silently starve the
+        // (lower-latency) stutter detector for the rest of the round.
         synchronized(this) {
-            if (fastPathLastRoundId == currentRound && fastPathCrashFiredForRound.get()) {
+            if (fastPathLastRoundId == currentRound && stutterAlertFiredForRound.get()) {
                 return
             }
             fastPathLastRoundId = currentRound
-            fastPathCrashFiredForRound.set(true)
+            stutterAlertFiredForRound.set(true)
             lastStutterAlertMult = liveMult
             lastStutterAlertTime = now
             liveTickAnalyzer.markAlertFired()
@@ -701,10 +713,33 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         // Keep UI multiplier synchronously updated to eliminate lag
         _currentMultiplier.postValue(liveMult)
 
-        // STRICT 4: Live authoritative flight multiplier for the alert (never past round values)
+        // STRICT 5: Live authoritative flight multiplier for the alert (never past round values)
         val alertType = if (is10x) "TARGET_10X_SNIPER" else "ANIMATION_MICRO_BLINK"
-        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, liveMult, "CRITICAL", alertType))
+        maybePublishPreCrashAlert(
+            PreCrashAlertState(true, currentRound, liveMult, "CRITICAL", alertType),
+            source = "STUTTER"
+        )
         onDiagnosticsReceived("[$alertType] ⚡ Cashout Alert @ ${"%.2f".format(liveMult)}x (${deltaMs.toInt()}ms drop)")
+    }
+
+    /**
+     * Publishes a pre-crash alert banner, preferring the lower-latency animation-stutter signal
+     * (source = "STUTTER") over the pattern-based onPreCrashAlert signal (source = "PATTERN") when
+     * both arrive for the same round, so a weaker pattern match that fires first can never silently
+     * override a higher-quality stutter detection. Only ever publishes once per round per source
+     * ordering so the UI never flickers between competing banners.
+     */
+    private fun maybePublishPreCrashAlert(candidate: PreCrashAlertState, source: String) {
+        synchronized(this) {
+            if (publishedAlertRoundId == candidate.roundId) {
+                // Already published for this round - only allow STUTTER to upgrade a PATTERN banner,
+                // never the reverse.
+                if (!(source == "STUTTER" && publishedAlertSource == "PATTERN")) return
+            }
+            publishedAlertRoundId = candidate.roundId
+            publishedAlertSource = source
+        }
+        _preCrashAlert.postValue(candidate)
     }
 
     override fun onDiagnosticsReceived(message: String) {
@@ -830,10 +865,13 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
         // Reset alert guards for the new round
         prepareAlertFiredForRound.set(false)
-        fastPathCrashFiredForRound.set(false)
+        stutterAlertFiredForRound.set(false)
+        patternAlertFiredForRound.set(false)
         fastPathLastRoundId = roundId
         lastStutterAlertMult = 0.0
         lastStutterAlertTime = 0L
+        publishedAlertRoundId = ""
+        publishedAlertSource = ""
 
         // Reset live tick cadence analyzer for new round
         liveTickAnalyzer.onNewRound(roundId)
@@ -856,13 +894,19 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         val is10x = _isTarget10xOnly.value == true
         if (is10x && currentMultiplier < 10.0) return
 
-        // STRICT: Only one alert per round across all subsystems
-        if (fastPathCrashFiredForRound.get()) return
-        fastPathCrashFiredForRound.set(true)
-        fastPathLastRoundId = roundId
+        // STRICT: One alert per round for THIS producer only (see stutterAlertFiredForRound comment) -
+        // no longer shares a flag with onAnimationStutter.
+        synchronized(this) {
+            if (fastPathLastRoundId == roundId && patternAlertFiredForRound.get()) return
+            fastPathLastRoundId = roundId
+            patternAlertFiredForRound.set(true)
+        }
 
         val alertReason = if (is10x) "TARGET_10X_PRE_CRASH" else reason
-        _preCrashAlert.postValue(PreCrashAlertState(true, roundId, currentMultiplier, confidence, alertReason))
+        maybePublishPreCrashAlert(
+            PreCrashAlertState(true, roundId, currentMultiplier, confidence, alertReason),
+            source = "PATTERN"
+        )
         onDiagnosticsReceived("[PRE_CRASH_SIGNAL] ⚡ Pre-crash signal alert at ${currentMultiplier}x ($alertReason)")
     }
 
@@ -882,11 +926,14 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
         _preCrashAlert.postValue(null)
 
         synchronized(this) {
-            fastPathCrashFiredForRound.set(true) // Lock down crashed round so no lingering packets fire
-            fastPathLastRoundId = roundId
+            stutterAlertFiredForRound.set(false)
+            patternAlertFiredForRound.set(false)
+            prepareAlertFiredForRound.set(false)
+            fastPathLastRoundId = ""
             lastStutterAlertMult = 0.0
             lastStutterAlertTime = 0L
-            prepareAlertFiredForRound.set(false)
+            publishedAlertRoundId = ""
+            publishedAlertSource = ""
         }
 
         viewModelScope.launch(Dispatchers.IO) {

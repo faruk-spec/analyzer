@@ -3,12 +3,18 @@ package com.example.aviatorsignallab.webview
 object ScriptInjector {
 
     /**
-     * Stealth client-side telemetry script.
+     * Builds the stealth client-side telemetry script.
      * Hooks WebSocket (JSON, Blobs, ArrayBuffers), Console, Canvas 2D fillText, Fetch, and XHR.
      * Extracts multipliers, round IDs, and crash signals in real-time across all frames.
      * Prevents false updates on casino lobbies by isolating game frames.
+     *
+     * @param deviceFrameIntervalMs The host device's actual display frame interval in milliseconds
+     *   (1000 / refresh rate Hz), used to seed the animation-stutter detector's learned frame-time
+     *   baseline. Passing the real value (instead of assuming 60Hz) avoids an initial bias window on
+     *   90Hz/120Hz devices where the detector would otherwise classify every normal frame as a
+     *   stutter until it self-learns the true baseline.
      */
-    val INJECTION_SCRIPT: String = """
+    fun buildInjectionScript(deviceFrameIntervalMs: Double = 16.6): String = """
         (function() {
             if (window.__aviatorLabInstrumented) return;
             window.__aviatorLabInstrumented = true;
@@ -24,12 +30,18 @@ object ScriptInjector {
                 try {
                     var strPayload = typeof payload === 'string' ? payload : JSON.stringify(payload);
                     var payloadSize = size || (strPayload ? strPayload.length : 0);
+                    var isTopFrame = (window.top === window);
 
-                    if (window.AndroidBridge && window.AndroidBridge.onNetworkEvent) {
-                        window.AndroidBridge.onNetworkEvent(transport, direction, strPayload || '', payloadSize);
-                    }
-                    // Also forward to parent/top window for cross-origin iframes
-                    if (window.top && window.top !== window) {
+                    // Only the top-most frame calls the native bridge directly. Nested frames only
+                    // forward upward via postMessage; the top frame's message listener below is the
+                    // single place that re-dispatches forwarded events to Android. Without this split,
+                    // a nested frame's own direct bridge call AND its postMessage forward (re-dispatched
+                    // by the top frame) both reached Android for the same event, duplicating telemetry.
+                    if (isTopFrame) {
+                        if (window.AndroidBridge && window.AndroidBridge.onNetworkEvent) {
+                            window.AndroidBridge.onNetworkEvent(transport, direction, strPayload || '', payloadSize);
+                        }
+                    } else {
                         window.top.postMessage({
                             __aviatorLabEvent: true,
                             transport: transport,
@@ -43,10 +55,12 @@ object ScriptInjector {
 
             function safeLog(msg) {
                 try {
-                    if (window.AndroidBridge && window.AndroidBridge.onDiagnostics) {
-                        window.AndroidBridge.onDiagnostics(msg);
-                    }
-                    if (window.top && window.top !== window) {
+                    var isTopFrame = (window.top === window);
+                    if (isTopFrame) {
+                        if (window.AndroidBridge && window.AndroidBridge.onDiagnostics) {
+                            window.AndroidBridge.onDiagnostics(msg);
+                        }
+                    } else {
                         window.top.postMessage({ __aviatorLabDiag: true, msg: msg }, '*');
                     }
                 } catch(e) {}
@@ -68,10 +82,15 @@ object ScriptInjector {
                 try {
                     var href = (window.location.href || "").toLowerCase();
                     if (href.indexOf('aviator') !== -1 || href.indexOf('spribe') !== -1 || href.indexOf('crash') !== -1) return true;
-                    // If inside an iframe and document has canvas
-                    if (window.top !== window && document.querySelector('canvas')) return true;
-                    // If top window has canvas with aviator multiplier active
-                    if (document.querySelector('canvas') && (window.__aviatorFlightActive || (window.__aviatorCurrentMult && window.__aviatorCurrentMult >= 1.0))) return true;
+                    // Require THIS frame to have actually observed its own game signal (a canvas,
+                    // DOM, or WebSocket match detected locally - see __aviatorLocalSignalSeen writes
+                    // below), not just inherited __aviatorFlightActive/__aviatorCurrentMult state that
+                    // was broadcast in from a sibling/parent frame via postMessage. The previous check
+                    // ("any iframe containing a <canvas>" or "any frame once global flight state is
+                    // active") let unrelated iframes (ads, chat widgets, lobby panels with a canvas)
+                    // qualify as a game frame and report their own unrelated render hitches as
+                    // ANIMATION_MICRO_BLINK stutters.
+                    if (window.__aviatorLocalSignalSeen === true) return true;
                 } catch(e) {}
                 return false;
             }
@@ -237,12 +256,16 @@ object ScriptInjector {
                         if (mulMatch && mulMatch[1]) {
                             var mVal = parseFloat(mulMatch[1]);
                             if (mVal >= 1.0) {
+                                // This frame itself observed a live game signal - mark it as a
+                                // confirmed game context (see isGameContext()).
+                                window.__aviatorLocalSignalSeen = true;
                                 var isActiveFlight = mVal >= 1.08;
                                 broadcastFlightSync(mVal, isActiveFlight);
                             }
                         }
 
                         if (str.indexOf('"cmd":84') !== -1 || str.indexOf('"cmd":"84"') !== -1) {
+                            window.__aviatorLocalSignalSeen = true;
                             if (str.indexOf('"sta":1') !== -1 || str.indexOf('"sta":3') !== -1 || str.indexOf('"sta":4') !== -1 ||
                                 str.indexOf('"sta":"1"') !== -1 || str.indexOf('"sta":"3"') !== -1 || str.indexOf('"sta":"4"') !== -1) {
                                 if (typeof window.__purgeRoundData === 'function') {
@@ -336,11 +359,16 @@ object ScriptInjector {
                             var trimmed = text.trim();
                             var upper = trimmed.toUpperCase();
                             if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
+                                // This frame itself rendered the crash text - confirmed game context.
+                                window.__aviatorLocalSignalSeen = true;
                                 if (typeof window.__purgeRoundData === 'function') {
                                     window.__purgeRoundData();
                                 } else {
                                     purgeAllRoundDataLocally();
                                 }
+                                try {
+                                    if (typeof broadcastFlightSync === 'function') broadcastFlightSync(0.0, false);
+                                } catch(e) {}
                                 if (lastCanvasMult !== "CRASH") {
                                     lastCanvasMult = "CRASH";
                                     safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
@@ -354,6 +382,8 @@ object ScriptInjector {
                                 if (match && match[1]) {
                                     var num = parseFloat(match[1]);
                                     if (num >= 1.0 && num <= 100000.0 && num >= (window.__aviatorCurrentMult || 0.0) && match[1] !== lastCanvasMult) {
+                                        // This frame itself rendered the multiplier text - confirmed game context.
+                                        window.__aviatorLocalSignalSeen = true;
                                         lastCanvasMult = match[1];
                                         window.__aviatorCurrentMult = num;
                                         var isCanvasActive = num >= 1.10;
@@ -543,7 +573,7 @@ object ScriptInjector {
             // A micro-stutter / dropped frame during flight precedes the crash animation sequence.
             try {
                 var lastRafTime = performance.now();
-                var smoothedFrameDelta = 16.6;
+                var smoothedFrameDelta = ${deviceFrameIntervalMs};
 
                 function frameAuditLoop(now) {
                     var delta = now - lastRafTime;
@@ -602,18 +632,23 @@ object ScriptInjector {
                         lastStutterAlertTime = now;
                         safeLog("[ANIMATION_MICRO_BLINK] Frame drop: " + delta.toFixed(1) + "ms (baseline=" + smoothedFrameDelta.toFixed(1) + "ms, mult=" + curM.toFixed(2) + "x)");
 
-                        if (window.AndroidBridge && window.AndroidBridge.onAnimationStutter) {
-                            window.AndroidBridge.onAnimationStutter(delta, String(curM));
-                        }
-                        try {
-                            if (window.top && window.top !== window) {
+                        // Only the top-most frame calls the native bridge directly; a nested frame only
+                        // forwards upward via postMessage so the top frame's listener is the single place
+                        // that re-dispatches to Android. Previously a nested frame did BOTH, duplicating
+                        // the stutter call into Kotlin for the same event.
+                        if (window.top === window) {
+                            if (window.AndroidBridge && window.AndroidBridge.onAnimationStutter) {
+                                window.AndroidBridge.onAnimationStutter(delta, String(curM));
+                            }
+                        } else {
+                            try {
                                 window.top.postMessage({
                                     __aviatorLabAnimStutter: true,
                                     delta: delta,
                                     mult: String(curM)
                                 }, '*');
-                            }
-                        } catch(e) {}
+                            } catch(e) {}
+                        }
                     }
 
                     requestAnimationFrame(frameAuditLoop);
@@ -637,6 +672,8 @@ object ScriptInjector {
                                 if (txt.length > 0 && txt.length < 25) {
                                     var upper = txt.toUpperCase();
                                     if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
+                                        // This frame itself rendered the crash text - confirmed game context.
+                                        window.__aviatorLocalSignalSeen = true;
                                         if (typeof window.__purgeRoundData === 'function') {
                                             window.__purgeRoundData();
                                         } else {
@@ -656,6 +693,8 @@ object ScriptInjector {
                                         if (mMatch && mMatch[1]) {
                                             var mVal = parseFloat(mMatch[1]);
                                             if (mVal >= 1.0 && mVal >= (window.__aviatorCurrentMult || 0.0) && mMatch[1] !== lastDomAviatorMult) {
+                                                // This frame itself rendered the multiplier text - confirmed game context.
+                                                window.__aviatorLocalSignalSeen = true;
                                                 lastDomAviatorMult = mMatch[1];
                                                 window.__aviatorCurrentMult = mVal;
                                                 var isDomActive = mVal >= 1.10;
@@ -679,4 +718,9 @@ object ScriptInjector {
 
         })();
     """.trimIndent()
+
+    // Backward-compatible default (assumes a common 60Hz display). Callers that know the host
+    // device's actual refresh rate should call buildInjectionScript(actualFrameIntervalMs) instead -
+    // see MainActivity, which computes it from the display and passes it through.
+    val INJECTION_SCRIPT: String = buildInjectionScript()
 }

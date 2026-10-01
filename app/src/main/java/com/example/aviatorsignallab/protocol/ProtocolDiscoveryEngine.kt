@@ -26,6 +26,10 @@ class ProtocolDiscoveryEngine(
     var lastCrashTimestamp: Long = 0L
         private set
 
+    // Captures the just-finished round's final multiplier at the moment it crashes, before the next
+    // transitionToStart() replaces activeRound with a fresh GameRound (whose finalMultiplier defaults
+    // to 1.0). Callers that need "what did the previous round crash at" must read this, not
+    // activeRound?.finalMultiplier, which is only valid while that round is still active.
     var lastCrashFinalMultiplier: Double = 0.0
         private set
 

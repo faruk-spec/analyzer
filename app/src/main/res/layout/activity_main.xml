@@ -514,7 +514,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <!-- Instant Real-Time Pre-Crash Alert HUD Banner (Zero-Lag) -->
+            <!-- Instant Real-Time Pre-Crash Alert HUD Banner (Zero-Lag).
+                 NOTE: This banner only surfaces a signal - tapping "CASH OUT" does NOT perform any
+                 action inside the game (the app cannot safely automate real-money actions in the
+                 embedded WebView). It is intentionally non-clickable so it can never be mistaken for
+                 a working action button; use the dedicated dismiss (x) button to hide it. -->
             <LinearLayout
                 android:id="@+id/bannerPreCrashAlert"
                 android:layout_width="match_parent"
@@ -524,12 +528,14 @@
                 android:layout_marginTop="10dp"
                 android:layout_marginEnd="14dp"
                 android:background="@drawable/bg_pre_crash_alert"
+                android:clickable="false"
                 android:elevation="10dp"
+                android:focusable="false"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="14dp"
                 android:paddingTop="10dp"
-                android:paddingEnd="14dp"
+                android:paddingEnd="4dp"
                 android:paddingBottom="10dp"
                 android:visibility="gone">
 
@@ -566,12 +572,17 @@
                         android:textSize="10sp" />
                 </LinearLayout>
 
+                <!-- Informational status chip only - intentionally non-interactive. Clicks on the
+                     label do nothing in the real game, so it must not look/behave like a button that
+                     consumes taps; the actual dismiss affordance is the (x) button to its right. -->
                 <TextView
                     android:id="@+id/tvAlertAction"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:background="@drawable/bg_alert_action_pill"
+                    android:clickable="false"
+                    android:focusable="false"
                     android:paddingStart="10dp"
                     android:paddingTop="5dp"
                     android:paddingEnd="10dp"
@@ -580,6 +591,17 @@
                     android:textColor="#B91C1C"
                     android:textSize="11sp"
                     android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/ivAlertDismiss"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="2dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Dismiss alert"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_close"
+                    app:tint="#FEE2E2" />
             </LinearLayout>
 
             <!-- Floating Bubble Overlay Widget (When HUD Strip is Collapsed) -->

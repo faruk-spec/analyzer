@@ -54,6 +54,24 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
     private var isBubbleModeActive: Boolean = false
     private var selectedBaseUnit: Int = 100
 
+    // Tracks whether the pre-crash alert banner is currently showing, so the live multiplier
+    // observer knows whether it needs to keep refreshing the banner's headline text/color.
+    private var isPreCrashAlertActive: Boolean = false
+    private var isPreCrashAlertTarget10x: Boolean = false
+    private var userDismissedAlertBanner: Boolean = false
+
+    /**
+     * Actual host display frame interval in milliseconds (1000 / refresh rate Hz), used to seed the
+     * JS-side animation-stutter detector's learned baseline instead of assuming a fixed 60Hz. On
+     * 90Hz/120Hz devices this avoids an initial-bias window where every normal frame would be
+     * misclassified as a stutter until the detector self-learns the true baseline.
+     */
+    @Suppress("DEPRECATION")
+    private val deviceFrameIntervalMs: Double by lazy {
+        val refreshRateHz = windowManager.defaultDisplay?.refreshRate ?: 60f
+        if (refreshRateHz > 1f) 1000.0 / refreshRateHz else 16.6
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -155,13 +173,13 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         settings.userAgentString = defaultUa.replace("; wv", "").replace("Version/4.0 ", "")
 
         webView.addJavascriptInterface(GameProtocolBridge(viewModel), "AndroidBridge")
-        webView.webViewClient = InstrumentedWebViewClient(this)
+        webView.webViewClient = InstrumentedWebViewClient(this, deviceFrameIntervalMs)
         webView.webChromeClient = InstrumentedWebChromeClient(this)
 
         if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) {
             androidx.webkit.WebViewCompat.addDocumentStartJavaScript(
                 webView,
-                ScriptInjector.INJECTION_SCRIPT,
+                ScriptInjector.buildInjectionScript(deviceFrameIntervalMs),
                 setOf("*")
             )
         }
@@ -238,6 +256,13 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 val formatted = "%.2fx".format(mult)
                 binding.tvMetricMultiplier.text = formatted
                 binding.tvBubbleMultiplier.text = formatted
+
+                // Keep the alert banner's headline multiplier live instead of freezing at the
+                // value it had when the alert first fired - otherwise it shows a stale number
+                // while the metrics strip/bubble keep climbing, which looks like a contradiction.
+                if (isPreCrashAlertActive) {
+                    renderAlertBannerText(mult)
+                }
 
                 val isLiveFlight = viewModel.connectionStatus.value == "OBSERVING" || viewModel.connectionStatus.value == "ROUND START"
                 if (mult >= 1.10 && isLiveFlight) {
@@ -320,25 +345,15 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 alert.multiplier >= minAlertMult &&
                 alert.multiplier <= (curMult * 1.35)
             ) {
-                val liveM = maxOf(alert.multiplier, curMult)
+                isPreCrashAlertActive = true
+                isPreCrashAlertTarget10x = is10x
+                userDismissedAlertBanner = false
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
                 binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
                 binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
 
-                val titleText = if (is10x) {
-                    "🎯 TARGET >10x CASHOUT SIGNAL @ %.2fx".format(liveM)
-                } else {
-                    "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(liveM)
-                }
-                val subText = if (is10x) {
-                    "High-Value Pre-Crash Anomaly Detected at %.2fx • Cash Out Now!".format(liveM)
-                } else {
-                    "Crash animation hitch detected BEFORE crash • Tap Cash Out!"
-                }
-
-                binding.tvAlertTitle.text = titleText
-                binding.tvAlertSubtitle.text = subText
-                binding.tvBubbleStatus.text = if (is10x) "🎯CASH OUT" else "⚡CASH OUT"
+                renderAlertBannerText(maxOf(alert.multiplier, viewModel.currentMultiplier.value ?: 1.0))
+                binding.tvBubbleStatus.text = if (isPreCrashAlertTarget10x) "🎯CASH OUT" else "⚡CASH OUT"
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_rose))
@@ -346,6 +361,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 // Urgent double haptic vibration ONLY when multiplier >= 1.80x in active flight
                 triggerImmediateVibration()
             } else {
+                isPreCrashAlertActive = false
                 binding.bannerPreCrashAlert.visibility = View.GONE
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
@@ -627,6 +643,27 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
 
 
+    /**
+     * Renders the pre-crash alert banner's headline/subtitle for the given live multiplier.
+     * Called both when the alert first fires and on every subsequent live multiplier tick so the
+     * banner never shows a stale value while the round keeps climbing toward the crash.
+     */
+    private fun renderAlertBannerText(liveM: Double) {
+        if (userDismissedAlertBanner) return
+        val titleText = if (isPreCrashAlertTarget10x) {
+            "🎯 TARGET >10x CASHOUT SIGNAL @ %.2fx".format(liveM)
+        } else {
+            "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(liveM)
+        }
+        val subText = if (isPreCrashAlertTarget10x) {
+            "High-Value Pre-Crash Anomaly Detected at %.2fx • Cash Out Now!".format(liveM)
+        } else {
+            "Crash animation hitch detected BEFORE crash • Tap Cash Out!"
+        }
+        binding.tvAlertTitle.text = titleText
+        binding.tvAlertSubtitle.text = subText
+    }
+
     private fun triggerImmediateVibration() {
         try {
             val timings = longArrayOf(0L, 180L, 80L, 180L)
@@ -742,7 +779,8 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
         sheet.btnStake100.setOnClickListener { updateStakeButtons(100) }
         sheet.btnStake500.setOnClickListener { updateStakeButtons(500) }
 
-        binding.bannerPreCrashAlert.setOnClickListener {
+        binding.ivAlertDismiss.setOnClickListener {
+            userDismissedAlertBanner = true
             binding.bannerPreCrashAlert.visibility = View.GONE
         }
 
