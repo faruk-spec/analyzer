@@ -234,11 +234,6 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                     binding.webView.evaluateJavascript("if (typeof window.__syncFlight === 'function') window.__syncFlight($mult, true);", null)
                 }
 
-                // If pre-crash alert banner is actively showing, keep its title live with zero lag
-                if (binding.bannerPreCrashAlert.visibility == View.VISIBLE) {
-                    binding.tvAlertTitle.text = "⚡ MICRO-BLINK DETECTED @ %.2fx — CASH OUT NOW!".format(mult)
-                }
-
                 // Color adaptive shift
                 when {
                     viewModel.connectionStatus.value == "CRASH DETECTED" -> {

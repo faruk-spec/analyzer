@@ -67,9 +67,11 @@ object ScriptInjector {
             function isGameContext() {
                 try {
                     var href = (window.location.href || "").toLowerCase();
-                    if (href.indexOf('aviator') !== -1 || href.indexOf('spribe') !== -1) return true;
+                    if (href.indexOf('aviator') !== -1 || href.indexOf('spribe') !== -1 || href.indexOf('crash') !== -1) return true;
                     // If inside an iframe and document has canvas
                     if (window.top !== window && document.querySelector('canvas')) return true;
+                    // If top window has canvas with aviator multiplier active
+                    if (document.querySelector('canvas') && (window.__aviatorFlightActive || (window.__aviatorCurrentMult && window.__aviatorCurrentMult >= 1.0))) return true;
                 } catch(e) {}
                 return false;
             }
@@ -505,18 +507,20 @@ object ScriptInjector {
                     lastRafTime = now;
 
                     // Smoothly learn baseline frame duration (60Hz=16.6ms, 90Hz=11.1ms, 120Hz=8.3ms)
-                    if (delta >= 4.0 && delta <= 30.0) {
-                        smoothedFrameDelta = smoothedFrameDelta * 0.92 + delta * 0.08;
+                    // Only incorporate normal steady-state frames (6ms - 20ms) so hitches do not corrupt baseline
+                    if (delta >= 6.0 && delta <= 20.0) {
+                        smoothedFrameDelta = smoothedFrameDelta * 0.95 + delta * 0.05;
                     }
 
-                    // Only evaluate animation stutters in windows hosting a game canvas or subframes
-                    if (window === window.top && !document.querySelector('canvas')) {
+                    // STRICT: Only evaluate animation stutters in the actual game frame!
+                    // Casino lobbies (sportsbook, chats, balance updates) run outside the game frame and produce false hitches.
+                    if (!isGameContext()) {
                         requestAnimationFrame(frameAuditLoop);
                         return;
                     }
 
                     var curM = window.__aviatorCurrentMult || 0.0;
-                    var flightActive = (window.__aviatorFlightActive || curM >= 1.20) && curM >= 1.20;
+                    var flightActive = window.__aviatorFlightActive && curM >= 1.25;
 
                     // STRICT: Only evaluate stutters when the plane is actively flying and multiplier has started!
                     // Zero vibration before multiplier start, zero vibration during betting, countdown, or page load.
@@ -525,21 +529,27 @@ object ScriptInjector {
                         return;
                     }
 
-                    // Adaptive multi-tier spike calculation:
-                    // As multiplier climbs, plane curve velocity accelerates dramatically.
-                    // At >10x and >5x, render hitches produce noticeable visual frame blinks.
-                    var spikeRatio = 1.55;
-                    var minAbsolute = 22.0;
-                    if (curM >= 10.0) {
-                        spikeRatio = 1.30;
-                        minAbsolute = 18.0;
-                    } else if (curM >= 5.0) {
-                        spikeRatio = 1.40;
-                        minAbsolute = 20.0;
-                    }
-                    var stutterThreshold = Math.max(minAbsolute, smoothedFrameDelta * spikeRatio);
+                    // Multi-tier physics-grounded stutter thresholds:
+                    // Normal 60Hz Android compositor jitter produces deltas of 16ms - 26ms during normal flight.
+                    // True pre-crash render hitches (where the game engine stalls while processing crash state)
+                    // drop at least 1.5 to 2 frames (>= 34ms on 60Hz).
+                    var base = smoothedFrameDelta;
+                    var minAbsolute = base > 13.0 ? 35.0 : 25.0; // 60Hz: 35ms, 90Hz+: 25ms
+                    var spikeRatio = 2.10;
 
-                    if (delta >= stutterThreshold && (now - lastStutterAlertTime > 1800)) {
+                    if (curM >= 12.0) {
+                        // Extreme velocity (>12x): sharp visual micro-blink
+                        minAbsolute = base > 13.0 ? 28.0 : 20.0;
+                        spikeRatio = 1.65;
+                    } else if (curM >= 6.0) {
+                        // High velocity (6x-12x)
+                        minAbsolute = base > 13.0 ? 31.0 : 22.0;
+                        spikeRatio = 1.85;
+                    }
+
+                    var stutterThreshold = Math.max(minAbsolute, base * spikeRatio);
+
+                    if (delta >= stutterThreshold && (now - lastStutterAlertTime > 2500)) {
                         lastStutterAlertTime = now;
                         safeLog("[ANIMATION_MICRO_BLINK] Frame drop: " + delta.toFixed(1) + "ms (baseline=" + smoothedFrameDelta.toFixed(1) + "ms, mult=" + curM.toFixed(2) + "x)");
 

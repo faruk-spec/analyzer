@@ -676,10 +676,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
         val currentRound = protocolEngine.currentRoundId
         val currentMult = protocolEngine.currentMultiplier
+        val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
+        val liveMult = if (parsed >= 1.25) maxOf(parsed, currentMult) else currentMult
 
         // STRICT 2: Multiplier MUST have started and climbed past takeoff (>= 1.25x)
         // Completely eliminates any vibration before multiplier start or during countdown/betting
-        if (currentMult < 1.25) return
+        if (liveMult < 1.25) return
 
         // STRICT 3: Exactly ONE single alert per round. Eliminates multi-alert spam (no 4.62, 7.70, 12.24)!
         synchronized(this) {
@@ -689,9 +691,12 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
             liveTickAnalyzer.markAlertFired()
         }
 
+        // Keep UI multiplier synchronously updated to eliminate lag
+        _currentMultiplier.postValue(liveMult)
+
         // STRICT 4: Live authoritative flight multiplier for the alert (never past round values)
-        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, currentMult, "CRITICAL", "ANIMATION_MICRO_BLINK"))
-        onDiagnosticsReceived("[ANIMATION_MICRO_BLINK] ⚡ Single Cashout Alert @ ${"%.2f".format(currentMult)}x (${deltaMs.toInt()}ms drop)")
+        _preCrashAlert.postValue(PreCrashAlertState(true, currentRound, liveMult, "CRITICAL", "ANIMATION_MICRO_BLINK"))
+        onDiagnosticsReceived("[ANIMATION_MICRO_BLINK] ⚡ Single Cashout Alert @ ${"%.2f".format(liveMult)}x (${deltaMs.toInt()}ms drop)")
     }
 
     override fun onDiagnosticsReceived(message: String) {
