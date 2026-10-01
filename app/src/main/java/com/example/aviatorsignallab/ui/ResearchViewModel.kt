@@ -431,6 +431,13 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     private var lastStutterAlertMult: Double = 0.0
     private var lastStutterAlertTime: Long = 0L
 
+    var lastCrashWallTime: Long = 0L
+        private set
+    var lastCrashFinalMultiplier: Double = 0.0
+        private set
+    var lastCrashedRoundId: String = ""
+        private set
+
     // Stage 1 Prepare Alert guard: tracks if advisory alert fired for current round
     private val prepareAlertFiredForRound = AtomicBoolean(false)
 
@@ -629,35 +636,54 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
      * Fires on the exact animation "blink / stutter" phenomenon immediately preceding the crash.
      */
     override fun onAnimationStutter(deltaMs: Double, multiplierStr: String) {
+        val now = System.currentTimeMillis()
+
         // STRICT 1: Must be in active LIVE flight (NEVER after crash, NEVER during countdown/betting)
         if (protocolEngine.currentState != GameState.LIVE) return
 
         // STRICT 1b: Active round status must explicitly be LIVE
         if (protocolEngine.activeRound?.status != "LIVE") return
 
-        // STRICT 1c: Post-Crash Lockout: Must be at least 3500ms after last crash to prevent post-crash scene hitches from alerting
-        val now = System.currentTimeMillis()
-        if (protocolEngine.lastCrashTimestamp > 0 && (now - protocolEngine.lastCrashTimestamp < 3500L)) return
+        // STRICT 1c: Post-Crash Lockout: Must be at least 4000ms after last crash to prevent post-crash scene hitches from alerting
+        val crashTime = if (lastCrashWallTime > 0) lastCrashWallTime else protocolEngine.lastCrashTimestamp
+        if (crashTime > 0 && (now - crashTime < 4000L)) return
 
         val currentRound = protocolEngine.currentRoundId
+        // STRICT 1d: Never alert on an uninitialized round or a round that already crashed!
+        if (currentRound.isEmpty() || currentRound == "--" || currentRound == lastCrashedRoundId) return
+
         val currentMult = protocolEngine.currentMultiplier
         val parsed = multiplierStr.toDoubleOrNull() ?: 0.0
-        val liveMult = if (parsed >= 1.80) maxOf(parsed, currentMult) else currentMult
 
-        // STRICT 1d: Never alert on a multiplier lower than or equal to the previous crash multiplier if within 8s
-        if (protocolEngine.lastCrashTimestamp > 0 && (now - protocolEngine.lastCrashTimestamp < 8000L)) {
-            val lastCrashMult = protocolEngine.activeRound?.finalMultiplier ?: 0.0
-            if (lastCrashMult > 1.0 && liveMult <= lastCrashMult) {
+        // STRICT 1e: Ground truth flight check: Multiplier MUST actively be >= 1.80x
+        if (currentMult < 1.80 && parsed < 1.80) return
+
+        // STRICT 1f: Discard stale residual multiplier from previous round!
+        // If current round multiplier is still early (<1.80x), parsed cannot be trusted as flight
+        if (currentMult < 1.80 && parsed >= 1.80) {
+            onDiagnosticsReceived("[STUTTER_REJECT] Stale multiplier rejected: curMult=${currentMult}x < 1.80x, parsed=${parsed}x")
+            return
+        }
+        // If parsed is more than 35% higher than authoritative flight multiplier, reject as lagging old round value
+        if (currentMult >= 1.80 && parsed > currentMult * 1.35) {
+            onDiagnosticsReceived("[STUTTER_REJECT] Stale multiplier rejected: parsed=${parsed}x > curMult=${currentMult}x * 1.35")
+            return
+        }
+
+        // STRICT 1g: Discard if within 8s of last crash and multiplier <= lastCrashFinalMultiplier
+        val lastCrashMult = if (lastCrashFinalMultiplier > 1.0) lastCrashFinalMultiplier else protocolEngine.lastCrashFinalMultiplier
+        if (crashTime > 0 && (now - crashTime < 8000L)) {
+            if (lastCrashMult > 1.0 && (currentMult <= lastCrashMult && parsed <= lastCrashMult)) {
                 return // Discard stale/lagged multiplier from previous round
             }
         }
+
+        val liveMult = if (parsed in 1.80..maxOf(currentMult * 1.25, 2.0)) maxOf(parsed, currentMult) else currentMult
 
         // STRICT 2: Check Target Filter Mode (>10x vs Standard >=1.80x)
         val is10x = _isTarget10xOnly.value == true
         val minThreshold = if (is10x) 10.0 else 1.80
         if (liveMult < minThreshold) return
-
-        val now = System.currentTimeMillis()
 
         // STRICT 3: Strictly ONE single alert per round!
         // Completely eliminates multiple alert spam on high multipliers (e.g. 248x round)
@@ -774,10 +800,22 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
 
         when (newState) {
             GameState.LIVE -> _connectionStatus.postValue("OBSERVING")
-            GameState.CRASH -> _connectionStatus.postValue("CRASH DETECTED")
-            GameState.ROUND_START -> _connectionStatus.postValue("ROUND START")
-            GameState.ROUND_COMPLETE -> _connectionStatus.postValue("ROUND COMPLETE")
-            else -> _connectionStatus.postValue("CONNECTED")
+            GameState.CRASH -> {
+                _connectionStatus.postValue("CRASH DETECTED")
+                _preCrashAlert.postValue(null)
+            }
+            GameState.ROUND_START -> {
+                _connectionStatus.postValue("ROUND START")
+                _preCrashAlert.postValue(null)
+            }
+            GameState.ROUND_COMPLETE -> {
+                _connectionStatus.postValue("ROUND COMPLETE")
+                _preCrashAlert.postValue(null)
+            }
+            else -> {
+                _connectionStatus.postValue("CONNECTED")
+                _preCrashAlert.postValue(null)
+            }
         }
     }
 
@@ -811,7 +849,9 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     override fun onPreCrashAlert(roundId: String, currentMultiplier: Double, confidence: String, reason: String) {
         // Discard any legacy post-crash alerts or alerts before multiplier start
         if (reason.startsWith("FLEW_AWAY")) return
-        if (protocolEngine.currentState != GameState.LIVE || currentMultiplier < 1.25) return
+        if (protocolEngine.currentState != GameState.LIVE || currentMultiplier < 1.80) return
+        if (roundId.isEmpty() || roundId == "--" || roundId == lastCrashedRoundId) return
+        if (protocolEngine.currentMultiplier < 1.80) return
 
         val is10x = _isTarget10xOnly.value == true
         if (is10x && currentMultiplier < 10.0) return
@@ -831,16 +871,22 @@ class ResearchViewModel(application: Application) : AndroidViewModel(application
     }
 
     override fun onRoundCrashDetected(roundId: String, finalMultiplier: Double, crashTimestamp: Long) {
+        val now = System.currentTimeMillis()
+        lastCrashWallTime = now
+        lastCrashFinalMultiplier = finalMultiplier
+        lastCrashedRoundId = roundId
+
         _currentMultiplier.postValue(finalMultiplier)
 
         // Clear any pre-crash alert immediately upon crash so no delayed/post-crash alert stays or re-fires!
         _preCrashAlert.postValue(null)
 
         synchronized(this) {
-            fastPathCrashFiredForRound.set(false)
-            fastPathLastRoundId = ""
+            fastPathCrashFiredForRound.set(true) // Lock down crashed round so no lingering packets fire
+            fastPathLastRoundId = roundId
             lastStutterAlertMult = 0.0
             lastStutterAlertTime = 0L
+            prepareAlertFiredForRound.set(false)
         }
 
         viewModelScope.launch(Dispatchers.IO) {

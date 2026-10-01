@@ -26,6 +26,9 @@ class ProtocolDiscoveryEngine(
     var lastCrashTimestamp: Long = 0L
         private set
 
+    var lastCrashFinalMultiplier: Double = 0.0
+        private set
+
     var activeRound: GameRound? = null
         private set
 
@@ -238,7 +241,7 @@ class ProtocolDiscoveryEngine(
         currentRoundId = newRoundId
         currentMultiplier = 1.00
         roundStartTime = timestamp
-        lastCrashTimestamp = 0L
+        // Keep lastCrashTimestamp from previous crash to ensure post-crash grace periods and lockouts work accurately!
 
         isPreCrashAlertFiredForRound = false
         alertFiredMultiplier = 0.0
@@ -267,9 +270,10 @@ class ProtocolDiscoveryEngine(
         val prev = currentState
         currentState = GameState.CRASH
         lastCrashTimestamp = timestamp
+        lastCrashFinalMultiplier = finalMultiplier
         currentMultiplier = finalMultiplier
-        isPreCrashAlertFiredForRound = false
-        alertFiredMultiplier = 0.0
+        isPreCrashAlertFiredForRound = true
+        alertFiredMultiplier = finalMultiplier
 
         activeRound?.let {
             it.endTime = timestamp

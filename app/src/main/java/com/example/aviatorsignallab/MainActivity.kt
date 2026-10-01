@@ -172,10 +172,13 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
             binding.tvConnectionStatus.text = status
             binding.tvBubbleStatus.text = status
 
-            // Dismiss pre-crash alert immediately when round crashes, starts, or pauses
-            if (status == "CRASH DETECTED" || status == "ROUND START" || status == "ROUND COMPLETE" || status == "STANDBY" || status == "PAUSED") {
+            // Auto-clear and dismiss pre-crash alert immediately when round is not actively observing
+            if (status != "OBSERVING") {
                 binding.bannerPreCrashAlert.visibility = View.GONE
-                binding.webView.evaluateJavascript("if (typeof window.__syncFlight === 'function') window.__syncFlight(0.0, false);", null)
+                binding.webView.evaluateJavascript(
+                    "if (typeof window.__purgeRoundData === 'function') window.__purgeRoundData(); else if (typeof window.__syncFlight === 'function') window.__syncFlight(0.0, false);",
+                    null
+                )
             }
 
             if (status == "STANDBY" && (viewModel.currentMultiplier.value ?: 1.0) <= 1.0) {
@@ -218,6 +221,12 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         viewModel.currentRoundId.observe(this) { roundId ->
             binding.tvMetricCurRound.text = roundId
+            // Auto-clear pre-crash alert immediately upon any round change
+            binding.bannerPreCrashAlert.visibility = View.GONE
+            binding.webView.evaluateJavascript(
+                "if (typeof window.__purgeRoundData === 'function') window.__purgeRoundData(); else if (typeof window.__syncFlight === 'function') window.__syncFlight(0.0, false);",
+                null
+            )
             if (roundId == "--" && viewModel.connectionStatus.value == "STANDBY" && (viewModel.currentMultiplier.value ?: 1.0) <= 1.0) {
                 binding.tvMetricMultiplier.text = "--"
                 binding.tvBubbleMultiplier.text = "--"
@@ -292,9 +301,26 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
 
         // Real-Time Instant Pre-Crash Signal Alert (Zero-Lag BEFORE Crash)
         viewModel.preCrashAlert.observe(this) { alert ->
-            if (alert != null && alert.active && alert.multiplier >= 1.80) {
-                val liveM = maxOf(alert.multiplier, viewModel.currentMultiplier.value ?: 1.0)
-                val is10x = viewModel.isTarget10xOnly.value == true
+            val curRound = viewModel.currentRoundId.value ?: "--"
+            val curStatus = viewModel.connectionStatus.value ?: ""
+            val curMult = viewModel.currentMultiplier.value ?: 1.0
+            val is10x = viewModel.isTarget10xOnly.value == true
+            val minAlertMult = if (is10x) 10.0 else 1.80
+
+            // STRICT GATING:
+            // 1. Must have an active non-null alert
+            // 2. Alert's roundId MUST match current active round (never past/previous round!)
+            // 3. Status MUST actively be OBSERVING (live flight)
+            // 4. Live flight multiplier MUST already be >= minAlertMult (never during round start/countdown)
+            // 5. Alert multiplier MUST be >= minAlertMult and reasonably aligned with curMult
+            if (alert != null && alert.active &&
+                curRound != "--" && alert.roundId == curRound &&
+                curStatus == "OBSERVING" &&
+                curMult >= minAlertMult &&
+                alert.multiplier >= minAlertMult &&
+                alert.multiplier <= (curMult * 1.35)
+            ) {
+                val liveM = maxOf(alert.multiplier, curMult)
                 binding.bannerPreCrashAlert.visibility = View.VISIBLE
                 binding.bannerPreCrashAlert.setBackgroundResource(R.drawable.bg_pre_crash_alert)
                 binding.ivAlertIcon.setColorFilter(ContextCompat.getColor(this, R.color.accent_rose))
@@ -323,7 +349,7 @@ class MainActivity : AppCompatActivity(), WebViewStatusListener, WebChromeStatus
                 binding.bannerPreCrashAlert.visibility = View.GONE
                 binding.tvMetricMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
                 binding.tvBubbleMultiplier.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
-                binding.tvBubbleStatus.text = "LIVE"
+                binding.tvBubbleStatus.text = if (curStatus == "OBSERVING") "LIVE" else curStatus
                 binding.tvBubbleStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald))
             }
         }

@@ -76,6 +76,48 @@ object ScriptInjector {
                 return false;
             }
 
+            var lastCanvasMult = "";
+            var lastDomAviatorMult = "";
+            var lastDomCrashState = "";
+            var lastStutterAlertTime = 0;
+
+            function purgeAllRoundDataLocally() {
+                try {
+                    window.__aviatorCurrentMult = 0.0;
+                    window.__aviatorFlightActive = false;
+                    window.__lastCrashTime = performance.now();
+                    lastCanvasMult = "";
+                    lastDomAviatorMult = "";
+                    lastDomCrashState = "CRASH";
+                    lastStutterAlertTime = 0;
+                } catch(e) {}
+            }
+
+            window.__purgeRoundData = function() {
+                try {
+                    purgeAllRoundDataLocally();
+                    var iframes = document.querySelectorAll('iframe');
+                    for (var i = 0; i < iframes.length; i++) {
+                        try {
+                            if (iframes[i].contentWindow) {
+                                iframes[i].contentWindow.postMessage({
+                                    __aviatorPurge: true,
+                                    __aviatorSyncMult: 0.0,
+                                    __aviatorFlightActive: false
+                                }, '*');
+                            }
+                        } catch(e) {}
+                    }
+                    if (window.top && window.top !== window) {
+                        window.top.postMessage({
+                            __aviatorPurge: true,
+                            __aviatorSyncMult: 0.0,
+                            __aviatorFlightActive: false
+                        }, '*');
+                    }
+                } catch(e) {}
+            };
+
             // Listener for cross-iframe forwarded events
             window.addEventListener('message', function(event) {
                 try {
@@ -87,12 +129,14 @@ object ScriptInjector {
                         if (window.AndroidBridge && window.AndroidBridge.onAnimationStutter) {
                             window.AndroidBridge.onAnimationStutter(event.data.delta, event.data.mult);
                         }
+                    } else if (event.data && event.data.__aviatorPurge) {
+                        purgeAllRoundDataLocally();
                     } else if (event.data && event.data.__aviatorSyncMult !== undefined) {
                         window.__aviatorCurrentMult = event.data.__aviatorSyncMult;
                         if (event.data.__aviatorFlightActive !== undefined) {
                             window.__aviatorFlightActive = event.data.__aviatorFlightActive;
                             if (!event.data.__aviatorFlightActive) {
-                                window.__lastCrashTime = performance.now();
+                                purgeAllRoundDataLocally();
                             }
                         }
                     }
@@ -162,18 +206,26 @@ object ScriptInjector {
                         window.__aviatorCurrentMult = mult;
                         window.__aviatorFlightActive = active;
                         if (!active) {
-                            window.__lastCrashTime = performance.now();
+                            purgeAllRoundDataLocally();
                         }
                         var iframes = document.querySelectorAll('iframe');
                         for (var i = 0; i < iframes.length; i++) {
                             try {
                                 if (iframes[i].contentWindow) {
-                                    iframes[i].contentWindow.postMessage({ __aviatorSyncMult: mult, __aviatorFlightActive: active }, '*');
+                                    iframes[i].contentWindow.postMessage({
+                                        __aviatorSyncMult: mult,
+                                        __aviatorFlightActive: active,
+                                        __aviatorPurge: !active
+                                    }, '*');
                                 }
                             } catch(e) {}
                         }
                         if (window.top && window.top !== window) {
-                            window.top.postMessage({ __aviatorSyncMult: mult, __aviatorFlightActive: active }, '*');
+                            window.top.postMessage({
+                                __aviatorSyncMult: mult,
+                                __aviatorFlightActive: active,
+                                __aviatorPurge: !active
+                            }, '*');
                         }
                     } catch(e) {}
                 }
@@ -193,7 +245,11 @@ object ScriptInjector {
                         if (str.indexOf('"cmd":84') !== -1 || str.indexOf('"cmd":"84"') !== -1) {
                             if (str.indexOf('"sta":1') !== -1 || str.indexOf('"sta":3') !== -1 || str.indexOf('"sta":4') !== -1 ||
                                 str.indexOf('"sta":"1"') !== -1 || str.indexOf('"sta":"3"') !== -1 || str.indexOf('"sta":"4"') !== -1) {
-                                broadcastFlightSync(0.0, false);
+                                if (typeof window.__purgeRoundData === 'function') {
+                                    window.__purgeRoundData();
+                                } else {
+                                    broadcastFlightSync(0.0, false);
+                                }
                             } else if (str.indexOf('"sta":2') !== -1 || str.indexOf('"sta":"2"') !== -1) {
                                 broadcastFlightSync(1.0, true);
                             }
@@ -272,7 +328,6 @@ object ScriptInjector {
             if (window.CanvasRenderingContext2D && !window.__aviatorCanvasHooked) {
                 window.__aviatorCanvasHooked = true;
                 var origFillText = CanvasRenderingContext2D.prototype.fillText;
-                var lastCanvasMult = "";
                 var strictCanvasMultRegex = /^\s*([0-9]{1,4}\.[0-9]{2})\s*[xX]\s*$/;
 
                 CanvasRenderingContext2D.prototype.fillText = function(text, x, y, maxWidth) {
@@ -281,15 +336,11 @@ object ScriptInjector {
                             var trimmed = text.trim();
                             var upper = trimmed.toUpperCase();
                             if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
-                                window.__aviatorCurrentMult = 0.0;
-                                window.__aviatorFlightActive = false;
-                                window.__lastCrashTime = performance.now();
-                                try {
-                                    if (typeof broadcastFlightSync === 'function') broadcastFlightSync(0.0, false);
-                                    if (window.top && window.top !== window) {
-                                        window.top.postMessage({ __aviatorSyncMult: 0.0, __aviatorFlightActive: false }, '*');
-                                    }
-                                } catch(e) {}
+                                if (typeof window.__purgeRoundData === 'function') {
+                                    window.__purgeRoundData();
+                                } else {
+                                    purgeAllRoundDataLocally();
+                                }
                                 if (lastCanvasMult !== "CRASH") {
                                     lastCanvasMult = "CRASH";
                                     safeDispatch("CANVAS", "INTERNAL", JSON.stringify({
@@ -474,8 +525,15 @@ object ScriptInjector {
                 try {
                     window.__aviatorCurrentMult = mult;
                     window.__aviatorFlightActive = active;
+                    if (!active) {
+                        purgeAllRoundDataLocally();
+                    }
                     if (window.top && window.top !== window) {
-                        window.top.postMessage({ __aviatorSyncMult: mult, __aviatorFlightActive: active }, '*');
+                        window.top.postMessage({
+                            __aviatorSyncMult: mult,
+                            __aviatorFlightActive: active,
+                            __aviatorPurge: !active
+                        }, '*');
                     }
                 } catch(e) {}
             };
@@ -485,7 +543,6 @@ object ScriptInjector {
             // A micro-stutter / dropped frame during flight precedes the crash animation sequence.
             try {
                 var lastRafTime = performance.now();
-                var lastStutterAlertTime = 0;
                 var smoothedFrameDelta = 16.6;
 
                 function frameAuditLoop(now) {
@@ -515,8 +572,8 @@ object ScriptInjector {
                         return;
                     }
 
-                    // STRICT Post-Crash Lockout: NEVER evaluate or fire stutters within 3.5s of a crash!
-                    if (window.__lastCrashTime && (now - window.__lastCrashTime < 3500)) {
+                    // STRICT Post-Crash Lockout: NEVER evaluate or fire stutters within 4.0s of a crash!
+                    if (window.__lastCrashTime && (now - window.__lastCrashTime < 4000)) {
                         requestAnimationFrame(frameAuditLoop);
                         return;
                     }
@@ -541,7 +598,7 @@ object ScriptInjector {
 
                     var stutterThreshold = Math.max(minAbsolute, base * spikeRatio);
 
-                    if (delta >= stutterThreshold && (now - lastStutterAlertTime > 2500)) {
+                    if (delta >= stutterThreshold && (now - lastStutterAlertTime > 4000)) {
                         lastStutterAlertTime = now;
                         safeLog("[ANIMATION_MICRO_BLINK] Frame drop: " + delta.toFixed(1) + "ms (baseline=" + smoothedFrameDelta.toFixed(1) + "ms, mult=" + curM.toFixed(2) + "x)");
 
@@ -566,8 +623,6 @@ object ScriptInjector {
 
             // 9. Real-Time Aviator HTML DOM Multiplier & Crash Scanner (Ultra-Fast 120ms sync)
             try {
-                var lastDomCrashState = "";
-                var lastDomAviatorMult = "";
                 var aviatorMultRegex = /^\s*([0-9]{1,4}\.[0-9]{2})\s*[xX]\s*$/;
 
                 function checkAviatorDom() {
@@ -582,13 +637,11 @@ object ScriptInjector {
                                 if (txt.length > 0 && txt.length < 25) {
                                     var upper = txt.toUpperCase();
                                     if (upper === "FLEW AWAY!" || upper === "FLEW AWAY" || upper.indexOf("FLEW-AWAY") !== -1 || upper.indexOf("CRASHED") !== -1) {
-                                        window.__aviatorCurrentMult = 0.0;
-                                        window.__aviatorFlightActive = false;
-                                        try {
-                                            if (window.top && window.top !== window) {
-                                                window.top.postMessage({ __aviatorSyncMult: 0.0, __aviatorFlightActive: false }, '*');
-                                            }
-                                        } catch(e) {}
+                                        if (typeof window.__purgeRoundData === 'function') {
+                                            window.__purgeRoundData();
+                                        } else {
+                                            purgeAllRoundDataLocally();
+                                        }
                                         if (lastDomCrashState !== "CRASH") {
                                             lastDomCrashState = "CRASH";
                                             safeDispatch("DOM", "INTERNAL", JSON.stringify({
